@@ -1,13 +1,13 @@
 ## Tutorials & References: 
-- [Wokwi in VS Code](https://www.youtube.com/watch?v=ECNTyMm_5PE)
+- [Wokwi in VS Code (YouTube)](https://www.youtube.com/watch?v=ECNTyMm_5PE)
 - [Wokwi Docs](https://docs.wokwi.com/)
 
 ## VS Code Extensions Required
 - [extensions.md](docs/extensions.md)
 
 ## `diagram.json` and Wokwi license generation
-- You will need to generate a wokwo license (free version, with a 30 days validity). This is required for the `diagram.json` file. 
-- Once you get the License, come back to VS Code, press `F1`, type wokwi, and click the `Wokwo: Manually enter License key`. 
+- You will need to generate a wokwi license (free version, with a 30 days validity). This is required for the `diagram.json` file. 
+- Once you get the License, come back to VS Code, press `F1`, type `wokwi`, and click the `Wokwi: Manually enter License key`. 
 - I'd recommend to store the key in an `.env` file. 
 - Drag and drop option won't be available in the VS Code extension for free users (available only for Hobby+ and Pro users). So: 
     - Create `diagram.json` file. 
