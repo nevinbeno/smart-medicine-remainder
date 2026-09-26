@@ -1,108 +1,162 @@
 #include <Arduino.h>
-#include <Wire.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
-#include <RTClib.h>
 
-#define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 64
+#include "../medicine-cell-data/include/configuration_loader.hpp"
 
-Adafruit_SSD1306 display(
-    SCREEN_WIDTH,
-    SCREEN_HEIGHT,
-    &Wire,
-    -1
-);
 
-RTC_DS1307 rtc;
+// Embedded configuration.json
+extern const uint8_t configuration_json_start[]
+    asm("_binary_medicine_cell_data_config_configuration_json_start");
 
-void setup() {
+extern const uint8_t configuration_json_end[]
+    asm("_binary_medicine_cell_data_config_configuration_json_end");
 
+
+void setup()
+{
     Serial.begin(115200);
 
-    // Start I2C
-    Wire.begin(21, 22);
+    delay(1000);
 
-    // Start OLED
-    if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
-        Serial.println("OLED initialization failed!");
-        while (true);
+    Serial.println();
+    Serial.println("================================");
+    Serial.println(" SMART MEDICINE CONFIGURATION");
+    Serial.println("================================");
+
+
+    // Get embedded JSON
+    const char* json =
+        reinterpret_cast<const char*>(
+            configuration_json_start
+        );
+
+
+    // Runtime configuration
+    RuntimeConfiguration configuration;
+
+
+    // Load JSON into C++ structures
+    if (!loadConfiguration(json, configuration))
+    {
+        Serial.println("ERROR: Configuration loading failed!");
+        return;
     }
 
-    // Start RTC
-    if (!rtc.begin()) {
-        Serial.println("RTC initialization failed!");
-        while (true);
+
+    Serial.println("Configuration loaded successfully!");
+    Serial.println();
+
+
+    // Display configuration
+    Serial.print("Cell count: ");
+    Serial.println(configuration.cellCount);
+
+    Serial.println();
+
+
+    for (uint8_t i = 0;
+         i < configuration.cellCount;
+         i++)
+    {
+        RuntimeCell& cell =
+            configuration.cells[i];
+
+
+        Serial.println("----------------------------");
+
+        Serial.print("Cell ID: ");
+        Serial.println(cell.cellId);
+
+
+        Serial.print("State: ");
+
+        if (cell.state == CellState::OCCUPIED)
+        {
+            Serial.println("OCCUPIED");
+        }
+        else if (cell.state == CellState::DISABLED_STATE)
+        {
+            Serial.println("DISABLED");
+        }
+        else
+        {
+            Serial.println("EMPTY");
+        }
+
+
+        Serial.print("Current stock: ");
+        Serial.println(cell.currentStock);
+
+
+        if (!cell.hasMedicine)
+        {
+            Serial.println("Medicine: None");
+            continue;
+        }
+
+
+        Serial.print("Medicine ID: ");
+        Serial.println(
+            cell.medicine.medicineId
+        );
+
+
+        Serial.print("Medicine name: ");
+        Serial.println(
+            cell.medicine.name
+        );
+
+
+        Serial.print("Low-stock threshold: ");
+        Serial.println(
+            cell.medicine.lowStockThreshold
+        );
+
+
+        Serial.print("Schedule count: ");
+        Serial.println(
+            cell.medicine.scheduleCount
+        );
+
+
+        for (uint8_t j = 0;
+             j < cell.medicine.scheduleCount;
+             j++)
+        {
+            ScheduleEntry& schedule =
+                cell.medicine.schedules[j];
+
+
+            Serial.print("  ");
+
+            if (schedule.hour < 10)
+                Serial.print("0");
+
+            Serial.print(schedule.hour);
+
+            Serial.print(":");
+
+            if (schedule.minute < 10)
+                Serial.print("0");
+
+            Serial.print(schedule.minute);
+
+            Serial.print(" -> dose ");
+
+            Serial.println(
+                schedule.doseQuantity
+            );
+        }
     }
 
-    Serial.println("OLED initialized!");
-    Serial.println("RTC initialized!");
+
+    Serial.println();
+    Serial.println("================================");
+    Serial.println(" Configuration test completed");
+    Serial.println("================================");
 }
 
-void loop() {
 
-    DateTime now = rtc.now();
-
-    // -------------------------
-    // Serial Monitor
-    // -------------------------
-
-    Serial.print("Time: ");
-
-    if (now.hour() < 10)
-        Serial.print("0");
-
-    Serial.print(now.hour());
-    Serial.print(":");
-
-    if (now.minute() < 10)
-        Serial.print("0");
-
-    Serial.print(now.minute());
-    Serial.print(":");
-
-    if (now.second() < 10)
-        Serial.print("0");
-
-    Serial.println(now.second());
-
-
-    // -------------------------
-    // OLED
-    // -------------------------
-
-    display.clearDisplay();
-
-    display.setTextColor(SSD1306_WHITE);
-
-    display.setTextSize(1);
-    display.setCursor(0, 0);
-    display.println("SMART MEDICINE");
-
-    display.setCursor(0, 15);
-    display.println("CURRENT TIME");
-
-    display.setTextSize(2);
-    display.setCursor(10, 32);
-
-    if (now.hour() < 10)
-        display.print("0");
-
-    display.print(now.hour());
-    display.print(":");
-
-    if (now.minute() < 10)
-        display.print("0");
-
-    display.print(now.minute());
-    display.print(":");
-
-    if (now.second() < 10)
-        display.print("0");
-
-    display.print(now.second());
-
-    display.display();
-
-    delay(1000);
+void loop()
+{
+    // Nothing required for this test.
 }

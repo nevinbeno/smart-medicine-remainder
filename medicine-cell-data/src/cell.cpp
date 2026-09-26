@@ -10,7 +10,7 @@ Cell::Cell(uint8_t cellId)
 
 bool Cell::assignMedicine(const char* medicineId)
 {
-    if (state == CellState::DISABLED || medicineId == nullptr)
+    if (state == CellState::DISABLED_STATE || medicineId == nullptr)
     {
         return false;
     }
@@ -23,7 +23,7 @@ bool Cell::assignMedicine(const char* medicineId)
 
 bool Cell::removeMedicine()
 {
-    if (state == CellState::DISABLED)
+    if (state == CellState::DISABLED_STATE)
     {
         return false;
     }
@@ -37,7 +37,7 @@ bool Cell::removeMedicine()
 
 bool Cell::setStock(uint16_t stock)
 {
-    if (state == CellState::DISABLED)
+    if (state == CellState::DISABLED_STATE)
     {
         return false;
     }
@@ -48,18 +48,18 @@ bool Cell::setStock(uint16_t stock)
 
 bool Cell::disable()
 {
-    if (state == CellState::DISABLED)
+    if (state == CellState::DISABLED_STATE)
     {
         return false;
     }
 
-    state = CellState::DISABLED;
+    state = CellState::DISABLED_STATE;
     return true;
 }
 
 bool Cell::enable()
 {
-    if (state != CellState::DISABLED)
+    if (state != CellState::DISABLED_STATE)
     {
         return false;
     }
@@ -93,5 +93,5 @@ CellState Cell::getState() const
 
 bool Cell::isEnabled() const
 {
-    return state != CellState::DISABLED;
+    return state != CellState::DISABLED_STATE;
 }

@@ -7,7 +7,7 @@ enum class CellState
 {
     EMPTY,
     OCCUPIED,
-    DISABLED
+    DISABLED_STATE
 };
 
 class Cell
