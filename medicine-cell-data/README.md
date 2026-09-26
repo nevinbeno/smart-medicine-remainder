@@ -250,7 +250,7 @@ The complete configuration pipeline is:
        Serial Monitor
 ```
 
-## 14. Build
+## 13. Build
 - Run
 ```bash
 pio run
@@ -260,7 +260,7 @@ pio run
        <img src="media/build-output.png"></img>
 </div>
 
-## 15. Output of the Final Test on ESP32: 
+## 14. Output of the Final Test on ESP32: 
 ```txt
        ets Jul 29 2019 12:21:46
 
