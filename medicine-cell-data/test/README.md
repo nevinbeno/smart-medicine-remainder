@@ -1,5 +1,6 @@
 # Testing
-Run: 
+1. Get into `medicine-cell-data/`
+2. Run: 
 ```python
-    python3 -m test.test_medicine
+    python3 -m test.filename
 ```
