@@ -1,0 +1,83 @@
+{
+    "cellCount": 4,
+    "cells": [
+        {
+            "cellId": "CELL01",
+            "state": "OCCUPIED",
+            "currentStock": 20,
+            "medicine": {
+                "medicineId": "MED001",
+                "name": "Paracetamol",
+                "lowStockThreshold": 3,
+                "schedules": [
+                    {
+                        "hour": 8,
+                        "minute": 0,
+                        "doseQuantity": 1
+                    },
+                    {
+                        "hour": 20,
+                        "minute": 0,
+                        "doseQuantity": 1
+                    }
+                ]
+            }
+        },
+        {
+            "cellId": "CELL02",
+            "state": "OCCUPIED",
+            "currentStock": 10,
+            "medicine": {
+                "medicineId": "MED002",
+                "name": "Cetirizine",
+                "lowStockThreshold": 2,
+                "schedules": [
+                    {
+                        "hour": 22,
+                        "minute": 0,
+                        "doseQuantity": 1
+                    }
+                ]
+            }
+        },
+        {
+            "cellId": "CELL03",
+            "state": "OCCUPIED",
+            "currentStock": 15,
+            "medicine": {
+                "medicineId": "MED003",
+                "name": "Amoxicillin",
+                "lowStockThreshold": 3,
+                "schedules": [
+                    {
+                        "hour": 13,
+                        "minute": 0,
+                        "doseQuantity": 1
+                    },
+                    {
+                        "hour": 22,
+                        "minute": 0,
+                        "doseQuantity": 1
+                    }
+                ]
+            }
+        },
+        {
+            "cellId": "CELL04",
+            "state": "OCCUPIED",
+            "currentStock": 8,
+            "medicine": {
+                "medicineId": "MED004",
+                "name": "Pantocid",
+                "lowStockThreshold": 3,
+                "schedules": [
+                    {
+                        "hour": 7,
+                        "minute": 0,
+                        "doseQuantity": 1
+                    }
+                ]
+            }
+        }
+    ]
+}
