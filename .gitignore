@@ -30,3 +30,9 @@ __pycache__/
 *.tmp
 *.swp
 *~
+
+# SQLite databases
+*.db
+*.db-journal
+*.db-wal
+*.db-shm

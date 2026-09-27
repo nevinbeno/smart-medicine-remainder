@@ -36,12 +36,20 @@
  * @brief Represents the state of a physical compartment/cell.
  * Matches CellState defined in medicine-cell-data.
  */
+#if defined(CELL_HPP)
+// Already defined in cell.hpp
+#elif __has_include("cell.hpp")
+#include "cell.hpp"
+#elif __has_include("../../medicine-cell-data/include/cell.hpp")
+#include "../../medicine-cell-data/include/cell.hpp"
+#else
 enum class CellState
 {
     EMPTY = 0,
     OCCUPIED = 1,
     DISABLED_STATE = 2
 };
+#endif
 
 /**
  * @brief Types of events emitted by the Scheduling & Event Engine.
