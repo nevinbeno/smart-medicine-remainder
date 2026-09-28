@@ -73,7 +73,7 @@
                 "schedules": [
                     {
                         "hour": 7,
-                        "minute": 00,
+                        "minute": 0,
                         "doseQuantity": 1
                     }
                 ]

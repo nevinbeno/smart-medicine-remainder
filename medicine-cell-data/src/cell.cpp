@@ -1,4 +1,4 @@
-#include "../include/cell.hpp"
+#include "../include/data_types.hpp"
 
 Cell::Cell(uint8_t cellId)
     : cellId(cellId),

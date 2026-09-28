@@ -2,10 +2,7 @@
 #define CELL_HARDWARE_CONTROLLER_H
 
 #include <Arduino.h>
-#include "HardwareConfig.h"
-#include "CellHardwareTypes.h"
 #include "CellHardware.h"
-#include "BuzzerController.h"
 
 /**
  * @file CellHardwareController.h

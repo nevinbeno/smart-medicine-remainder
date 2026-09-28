@@ -4,9 +4,7 @@
 #include <Arduino.h>
 #include "HardwareConfig.h"
 #include "CellHardwareTypes.h"
-#include "RgbLed.h"
-#include "DebouncedButton.h"
-#include "ServoController.h"
+#include "CellActuators.h"
 
 /**
  * @file CellHardware.h

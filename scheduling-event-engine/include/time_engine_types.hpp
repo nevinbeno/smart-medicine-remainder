@@ -36,12 +36,12 @@
  * @brief Represents the state of a physical compartment/cell.
  * Matches CellState defined in medicine-cell-data.
  */
-#if defined(CELL_HPP)
-// Already defined in cell.hpp
-#elif __has_include("cell.hpp")
-#include "cell.hpp"
-#elif __has_include("../../medicine-cell-data/include/cell.hpp")
-#include "../../medicine-cell-data/include/cell.hpp"
+#if defined(DATA_TYPES_HPP)
+// Already defined in data_types.hpp
+#elif __has_include("data_types.hpp")
+#include "data_types.hpp"
+#elif __has_include("../../medicine-cell-data/include/data_types.hpp")
+#include "../../medicine-cell-data/include/data_types.hpp"
 #else
 enum class CellState
 {
