@@ -5,6 +5,7 @@
 .vscode/ipch
 *.env
 *.code-workspace
+dummy_guide.md
 
 # PlatformIO
 .pio/
