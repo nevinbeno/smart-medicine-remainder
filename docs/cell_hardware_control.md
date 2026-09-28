@@ -38,25 +38,6 @@ In the **Smart Medicine Reminder and Dose Management System**, the system archit
 
 ---
 
-## 2. Root Cause Analysis & Fixes: Cell 4 Servo & Common Buzzer
-
-### Problem 1: Cell 4 Servo Not Responding (Cells 1–3 Working)
-- **Root Cause Analysis:**
-  1. **Wokwi Board Pin Name Mismatch:** In `HardwareConfig.h`, Servo 4 was assigned to GPIO 17 (`PIN_CELL4_SERVO = 17`). In `diagram.json`, it was wired to `esp:D17`. On the `wokwi-esp32-devkit-v1` part, GPIO 17 is the hardware UART2 TX pin and is silkscreened/keyed as **`TX2`**, NOT `D17`. Because no pin `D17` exists on the Wokwi DevKit V1 component, Wokwi dropped the connection, leaving Servo 4 floating/disconnected. (Similarly, `rgb2:G` was wired to `esp:D16` instead of `esp:RX2`).
-  2. **Timer Collision on Timer 0:** In `ServoController.cpp`, `ESP32PWM::allocateTimer(0)` was allocating hardware Timer 0. Because the ESP32 Arduino framework's `tone()` implementation in `Tone.cpp` uses LEDC Channel 0 on Timer 0, allocating Timer 0 to `ESP32Servo` at 50 Hz created a timer collision.
-- **Fixes Applied:**
-  1. **Wokwi Connection Fix:** Updated `diagram.json` line 174 to connect `servo4:PWM` to `"esp:TX2"`. Updated line 151 to connect `rgb2:G` to `"esp:RX2"`.
-  2. **Dedicated Servo Timer Allocation:** In `ServoController.cpp`, changed timer allocation to `ESP32PWM::allocateTimer(1); ESP32PWM::allocateTimer(2); ESP32PWM::allocateTimer(3);`. This leaves Timer 0 exclusively for `tone()`, while Timers 1, 2, and 3 provide 12 channels for the 4 50Hz servos with zero conflicts.
-
-### Problem 2: Common Buzzer Completely Inactive
-- **Root Cause Analysis:**
-  1. **Wokwi Audio Simulation Trigger:** In Wokwi, the `wokwi-buzzer` component simulates an acoustic piezo element using browser Web Audio API that hooks directly into Arduino's standard `tone(pin, freq)` and `noTone(pin)` calls. Direct ESP-IDF `ledcSetup` / `ledcWrite` register calls bypass Wokwi's audio synthesis engine.
-  2. **Timer Overwrite by ESP32Servo:** When `ESP32Servo` previously claimed Timer 0, any subsequent call to `tone()` failed or reconfigured the servo's PWM frequency.
-  3. **Component Configuration:** Earlier `diagram.json` had `"hasSound": "true"` which is invalid in Wokwi, corrected to `"volume": "1.0"`.
-- **Fixes Applied:**
-  1. **Standard ESP32 Tone Generation:** In `BuzzerController.cpp`, implemented tone generation via `tone(_pin, _frequencyHz)` and `noTone(_pin)`.
-  2. **State-Change Gating:** Added `_isToneActive` latching guard so `tone()` is only invoked on genuine rising/falling edges of the alert cadence, avoiding FreeRTOS queue flooding in the main loop.
-  3. **Multi-Cell Alert Arbitration:** Managed a central `_activeAlertingCount`. The buzzer turns on when the count rises from 0 to $\ge 1$, maintains cadence while count $> 0$, and silences only when count drops to 0.
 
 ### Test Verification & Results
 - Verified with embedded PlatformIO builds and standalone native unit tests (`test_cell_hardware_native.cpp`):
