@@ -3,174 +3,219 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <RTClib.h>
-#include "CellHardwareEvents.h"
+#include <string>
+
+#include "HardwareBridge.h"
+#include "schedule_event_engine.hpp"
+#include "time_provider.hpp"
+#include "oled_notification_engine.hpp"
+#include "configuration_loader.hpp"
+#include "configuration_adapter.hpp"
+
+// Embedded configuration.json text file pointers from PlatformIO
+extern const uint8_t configuration_json_start[] asm("_binary_medicine_cell_data_config_configuration_json_start");
+extern const uint8_t configuration_json_end[]   asm("_binary_medicine_cell_data_config_configuration_json_end");
 
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 
-Adafruit_SSD1306 display(
-    SCREEN_WIDTH,
-    SCREEN_HEIGHT,
-    &Wire,
-    -1
-);
-
+// I2C Peripherals
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 RTC_DS1307 rtc;
 
-// Global instance of the 4-cell hardware controller (Role 4)
-CellHardwareController cellHardware(ACTIVE_CELL_COUNT);
+// Role 2 & Role 3 Singletons
+RTCTimeProvider rtcTimeProvider;
+ScheduleEventEngine scheduleEngine(&rtcTimeProvider);
+OledNotificationEngine oledUi;
 
 // Forward declarations
 void handleSerialCommands();
 
 /**
- * @brief Outbound Event Handler: DOSE_CONFIRMED
- *        Invoked when physical confirm button on a cell is debounced and pressed.
- *        Role 5 (Dose/Stock Management) attaches here to decrement medicine stock.
- *        NOTE: In accordance with Role 4 boundary, this function does NOT decrement stock!
+ * @brief Scheduler Event Callback Handler
+ *        Invoked whenever the Scheduling Engine emits an event
+ *        (DOSE_DUE, DOSE_MISSED, DOSE_CONFIRMED, DOSE_DISMISSED, DAILY_RESET, LOW_STOCK_WARNING).
+ *        Routes events to the 4-cell hardware controller (Role 4).
+ *        Note: OLED UI (Role 3) receives these events independently via its own listener.
  */
-void onDoseConfirmed(uint8_t cellId) {
-    Serial.printf("\n>>> [EVENT OUTBOUND] DOSE_CONFIRMED for Cell %u! (Dispatched to Role 5)\n", cellId + 1);
-    Serial.printf("    Hardware Action: Cell %u RGB is GREEN for 1s. Servo %u is CLOSED.\n\n", cellId + 1, cellId + 1);
+void onScheduleEngineEvent(const DoseEvent& event, void* /*userData*/) {
+    switch (event.type) {
+        case EventType::DOSE_DUE:
+            Serial.printf("\n>>> [SCHEDULER] DOSE_DUE: Cell %u (%s) - %s at %02u:%02u (Dose: %u)\n",
+                          event.cellIndex + 1, event.cellId, event.medicineName,
+                          event.scheduledTime.hour, event.scheduledTime.minute, event.doseQuantity);
+            // Trigger 4-Cell Hardware: LED RED, Servo OPEN to 90 deg, Buzzer pulsing
+            triggerHardwareMedicineDue(event.cellIndex);
+            break;
+
+        case EventType::DOSE_MISSED:
+            Serial.printf("\n>>> [SCHEDULER] DOSE_MISSED: Cell %u (%s) - %s at %02u:%02u (Grace period expired)\n",
+                          event.cellIndex + 1, event.cellId, event.medicineName,
+                          event.scheduledTime.hour, event.scheduledTime.minute);
+            // Trigger 4-Cell Hardware: LED YELLOW (Warning), Servo CLOSED
+            triggerHardwareMissedDose(event.cellIndex);
+            break;
+
+        case EventType::DOSE_CONFIRMED:
+            Serial.printf("\n>>> [SCHEDULER] DOSE_CONFIRMED: Cell %u (%s) - %s (Dose %u taken)\n",
+                          event.cellIndex + 1, event.cellId, event.medicineName, event.doseQuantity);
+            // Trigger 4-Cell Hardware: LED GREEN for 1s, Servo CLOSED
+            triggerHardwareDoseConfirmed(event.cellIndex);
+            break;
+
+        case EventType::DOSE_DISMISSED:
+            Serial.printf("\n>>> [SCHEDULER] DOSE_DISMISSED: Cell %u (%s) - %s\n",
+                          event.cellIndex + 1, event.cellId, event.medicineName);
+            // Clear warning state for this cell -> LED OFF
+            triggerHardwareReset(event.cellIndex);
+            break;
+
+        case EventType::DAILY_RESET:
+            Serial.println("\n>>> [SCHEDULER] DAILY_RESET: Midnight rollover! Refreshing daily schedules.");
+            triggerHardwareResetAll();
+            break;
+
+        case EventType::LOW_STOCK_WARNING:
+            Serial.printf("\n>>> [SCHEDULER] LOW_STOCK_WARNING: Cell %u (%s) - %s (Remaining Stock: %u)\n",
+                          event.cellIndex + 1, event.cellId, event.medicineName, event.doseQuantity);
+            break;
+
+        default:
+            break;
+    }
 }
 
 /**
- * @brief State Change Observer Callback
- *        Invoked whenever any cell undergoes a state machine transition.
- *        Role 3 (OLED UI & Notification Engine) can observe this to update screen.
+ * @brief Outbound Event Handler: Physical Button Press on a Cell
+ *        Invoked by the debounced button logic when a patient presses the button on a cell.
+ *        Passes the confirmation to the scheduler, which confirms active DUE doses
+ *        or dismisses active MISSED dose notifications, updating the OLED and hardware.
  */
-void onCellStateChanged(uint8_t cellId, CellState oldState, CellState newState) {
-    Serial.printf("[STATE CHANGE] Cell %u: %s -> %s\n",
-                  cellId + 1, cellStateToString(oldState), cellStateToString(newState));
+void onHardwareDoseConfirmed(uint8_t cellId) {
+    Serial.printf("[CONFIRM ACTION] Button pressed for Cell %u. Forwarding to Scheduling Engine...\n", cellId + 1);
+    bool handled = scheduleEngine.handleCellButtonPress(cellId);
+    if (!handled) {
+        Serial.printf("[CONFIRM ACTION] Cell %u button pressed, but no pending due or missed dose found in scheduler.\n", cellId + 1);
+    }
 }
 
 void setup() {
     Serial.begin(115200);
 
-    // Start I2C (Pins D21, D22 preserved for OLED and RTC)
+    // 1. Initialize I2C Bus (D21 SDA, D22 SCL preserved)
     Wire.begin(21, 22);
 
-    // Start OLED
-    if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
-        Serial.println("OLED initialization failed!");
-        while (true);
-    }
-
-    // Start RTC
+    // 2. Initialize Hardware RTC
     if (!rtc.begin()) {
         Serial.println("RTC initialization failed!");
         while (true);
     }
-
-    Serial.println("OLED initialized!");
+    if (!rtc.isrunning()) {
+        Serial.println("RTC was not running, setting to compile time...");
+        rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+    }
     Serial.println("RTC initialized!");
 
-    // Initialize Role 4: Cell Hardware & Alert Control (4 Cells, 4 Servos, Common Buzzer)
-    cellHardware.setConfirmationCallback(onDoseConfirmed);
-    cellHardware.setStateChangedCallback(onCellStateChanged);
-    cellHardware.begin();
+    // 3. Initialize Role 4: Cell Hardware & Alert Control (4 Cells, 4 Servos, Common Buzzer)
+    initHardwareBridge(onHardwareDoseConfirmed);
+    Serial.println("Role 4: 4-Cell Hardware & Alert Control initialized!");
 
-    Serial.println("=================================================");
-    Serial.println(" Smart Medicine Reminder - 4-Cell Hardware System");
-    Serial.println(" Role 4: Cell Hardware & Alert Control Active");
-    Serial.println("=================================================");
-    Serial.println("Configuration:");
-    Serial.println("  4 Independent Cells (Each has RGB LED, Button, Servo)");
-    Serial.println("  1 Common Piezo Buzzer (Arbitrated across all 4 cells)");
-    Serial.println("-------------------------------------------------");
+    // 4. Initialize Role 2: Scheduling & Time/Event Engine
+    scheduleEngine.setTimeProvider(&rtcTimeProvider);
+    scheduleEngine.setGracePeriodMinutes(5); // 5-minute grace window for alerts before marking MISSED
+    scheduleEngine.registerEventCallback(onScheduleEngineEvent);
+
+    // 5. Load dynamic configuration from embedded configuration.json (No hardcoding!)
+    size_t configLen = configuration_json_end - configuration_json_start;
+    std::string configJson(reinterpret_cast<const char*>(configuration_json_start), configLen);
+
+    RuntimeConfiguration runtimeConfig;
+    if (loadConfiguration(configJson.c_str(), runtimeConfig)) {
+        Serial.printf("[CONFIG] Successfully loaded configuration.json (%u cells configured):\n", runtimeConfig.cellCount);
+        for (uint8_t i = 0; i < runtimeConfig.cellCount; i++) {
+            RuntimeCell& c = runtimeConfig.cells[i];
+            Serial.printf("  Cell %u [%s]: %s (Stock: %u)\n",
+                          i + 1, c.cellId, c.hasMedicine ? c.medicine.name : "EMPTY", c.currentStock);
+            for (uint8_t s = 0; s < c.medicine.scheduleCount; s++) {
+                Serial.printf("    - Schedule: %02u:%02u (Dose: %u)\n",
+                              c.medicine.schedules[s].hour,
+                              c.medicine.schedules[s].minute,
+                              c.medicine.schedules[s].doseQuantity);
+            }
+        }
+        ConfigurationAdapter::loadIntoEngine(runtimeConfig, scheduleEngine);
+        Serial.println("[CONFIG] Schedules dynamically loaded into Scheduling Engine!");
+    } else {
+        Serial.println("[CONFIG] ERROR: Failed to parse configuration.json!");
+    }
+
+    // 6. Initialize Role 3: OLED UI & Notification Engine
+    if (!oledUi.begin(display, scheduleEngine)) {
+        Serial.println("OLED UI initialization failed!");
+        while (true);
+    }
+    Serial.println("Role 3: OLED UI & Notification Engine initialized!");
+
+    Serial.println("=================================================================");
+    Serial.println(" Smart Medicine Reminder System - Fully Integrated");
+    Serial.println(" Features Active: Scheduling + Dynamic Config + OLED + 4-Cell HW");
+    Serial.println("=================================================================");
     Serial.println("Interactive Commands via Serial Monitor:");
-    Serial.println("  DUE <1-4>     - Trigger MEDICINE_DUE for Cell X (RED + Servo OPEN + Buzzer)");
-    Serial.println("  CONFIRM <1-4> - Simulate confirmation button for Cell X");
-    Serial.println("  MISSED <1-4>  - Trigger MISSED_DOSE for Cell X (YELLOW + Servo CLOSED)");
-    Serial.println("  RESET <1-4>   - Reset Cell X to IDLE");
-    Serial.println("  RESET         - Reset all 4 cells to IDLE");
-    Serial.println("  STATUS        - Print hardware status of all 4 cells");
+    Serial.println("  STATUS            - Print full hardware, scheduler & event status");
+    Serial.println("  CONFIRM <1-4>     - Confirm dose for Cell X (simulates button press)");
+    Serial.println("  DUE <1-4>         - Manually trigger MEDICINE_DUE for Cell X");
+    Serial.println("  MISSED <1-4>      - Manually trigger MISSED_DOSE for Cell X");
+    Serial.println("  RESET <1-4>       - Reset Cell X to IDLE");
+    Serial.println("  RESET             - Reset all cells to IDLE & dismiss all reminders");
+    Serial.println("  TIME <HH> <MM> [SS] - Set RTC time (e.g., TIME 07 59 55 or TIME 21 59 55)");
+    Serial.println("  GRACE <minutes>   - Set missed dose grace period in minutes");
     Serial.println("Or click buttons 'Btn 1' - 'Btn 4' on virtual board!");
-    Serial.println("=================================================");
+    Serial.println("=================================================================");
 }
 
-// Non-blocking timer for OLED/RTC display update
-static uint32_t lastDisplayUpdate = 0;
+// Periodic heartbeat timer
+static uint32_t lastSerialHeartbeat = 0;
 
 void loop() {
     // -------------------------------------------------------------
     // 1. Role 4: Cell Hardware & Alert Control (Run continuously)
+    //    Debounces buttons, manages RGB LEDs, servos, buzzer cadence.
     // -------------------------------------------------------------
-    cellHardware.update();
+    updateHardwareBridge();
 
     // -------------------------------------------------------------
-    // 2. Interactive Serial Command Processing (Testing & Simulation)
+    // 2. Role 2: Scheduling & Time/Event Engine
+    //    Polls RTC time, detects due schedules, tracks grace periods,
+    //    handles simultaneous due events and midnight rollovers.
+    // -------------------------------------------------------------
+    scheduleEngine.update();
+
+    // -------------------------------------------------------------
+    // 3. Role 3: OLED UI & Notification Engine
+    //    Non-blocking: renders clock screen, active due notifications,
+    //    missed dose warnings, confirmation confirmations, rotating multi-doses.
+    // -------------------------------------------------------------
+    oledUi.update();
+
+    // -------------------------------------------------------------
+    // 4. Interactive Serial Command Processing
     // -------------------------------------------------------------
     handleSerialCommands();
 
     // -------------------------------------------------------------
-    // 3. OLED & RTC Update (Non-blocking: replaces delay(1000))
+    // 5. Periodic Heartbeat Log to Serial Monitor (Every 5 seconds)
     // -------------------------------------------------------------
     uint32_t currentMillis = millis();
-    if (currentMillis - lastDisplayUpdate >= 1000) {
-        lastDisplayUpdate = currentMillis;
+    if (currentMillis - lastSerialHeartbeat >= 5000) {
+        lastSerialHeartbeat = currentMillis;
 
         DateTime now = rtc.now();
-
-        // Serial Monitor Time Log
-        Serial.print("Time: ");
-        if (now.hour() < 10) Serial.print("0");
-        Serial.print(now.hour());
-        Serial.print(":");
-        if (now.minute() < 10) Serial.print("0");
-        Serial.print(now.minute());
-        Serial.print(":");
-        if (now.second() < 10) Serial.print("0");
-        Serial.println(now.second());
-
-        // OLED Update
-        display.clearDisplay();
-        display.setTextColor(SSD1306_WHITE);
-
-        display.setTextSize(1);
-        display.setCursor(0, 0);
-        display.println("SMART MEDICINE (4C)");
-
-        display.setCursor(0, 10);
-        display.println("CURRENT TIME");
-
-        display.setTextSize(2);
-        display.setCursor(10, 20);
-        if (now.hour() < 10) display.print("0");
-        display.print(now.hour());
-        display.print(":");
-        if (now.minute() < 10) display.print("0");
-        display.print(now.minute());
-        display.print(":");
-        if (now.second() < 10) display.print("0");
-        display.print(now.second());
-
-        // 4-Cell Status line on OLED
-        display.setTextSize(1);
-        display.setCursor(0, 42);
-        auto stateCode = [](CellState s) -> const char* {
-            switch (s) {
-                case CELL_STATE_ALERTING:  return "RED";
-                case CELL_STATE_CONFIRMED: return "GRN";
-                case CELL_STATE_WARNING:   return "YEL";
-                case CELL_STATE_IDLE:
-                default:                   return "OFF";
-            }
-        };
-
-        display.printf("1:%s 2:%s",
-            stateCode(cellHardware.getCellState(0)),
-            stateCode(cellHardware.getCellState(1))
-        );
-
-        display.setCursor(0, 52);
-        display.printf("3:%s 4:%s BZ:%s",
-            stateCode(cellHardware.getCellState(2)),
-            stateCode(cellHardware.getCellState(3)),
-            cellHardware.getActiveAlertCount() > 0 ? "ON" : "OFF"
-        );
-
-        display.display();
+        Serial.printf("[HEARTBEAT] RTC: %02u:%02u:%02u | Due: %u | Missed: %u | Alerting Cells: %u | Buzzer: %s\n",
+                      now.hour(), now.minute(), now.second(),
+                      scheduleEngine.getDueEventCount(),
+                      scheduleEngine.getMissedEventCount(),
+                      getHardwareActiveAlertCount(),
+                      getHardwareActiveAlertCount() > 0 ? "PULSING" : "SILENT");
     }
 }
 
@@ -182,65 +227,119 @@ void handleSerialCommands() {
 
     String line = Serial.readStringUntil('\n');
     line.trim();
-    line.toUpperCase();
 
     if (line.length() == 0) return;
 
-    if (line == "STATUS") {
-        Serial.println("\n--- 4-CELL HARDWARE STATUS ---");
-        for (uint8_t i = 0; i < cellHardware.getCellCount(); i++) {
-            CellHardware* c = cellHardware.getCell(i);
-            Serial.printf("Cell %u: %-22s | Servo %u: %s (%u deg)\n",
-                          i + 1,
-                          cellStateToString(cellHardware.getCellState(i)),
-                          i + 1,
-                          (c && c->getServo().isOpen()) ? "OPEN" : "CLOSED",
-                          c ? c->getServo().getCurrentAngle() : 0);
+    String upperLine = line;
+    upperLine.toUpperCase();
+
+    if (upperLine == "STATUS") {
+        printHardwareStatus();
+
+        DateTime now = rtc.now();
+        Serial.printf("Current RTC Time    : %02u:%02u:%02u\n", now.hour(), now.minute(), now.second());
+        Serial.printf("Grace Period        : %u minutes\n", scheduleEngine.getGracePeriodMinutes());
+        Serial.printf("Active Due Events   : %u\n", scheduleEngine.getDueEventCount());
+        for (uint8_t i = 0; i < scheduleEngine.getDueEventCount(); i++) {
+            const DoseEvent* ev = scheduleEngine.getDueEvent(i);
+            if (ev) {
+                Serial.printf("  - DUE: Cell %u (%s), %s, Sched: %02u:%02u, Qty: %u\n",
+                              ev->cellIndex + 1, ev->cellId, ev->medicineName,
+                              ev->scheduledTime.hour, ev->scheduledTime.minute, ev->doseQuantity);
+            }
         }
-        Serial.printf("Active Alert Count : %u\n", cellHardware.getActiveAlertCount());
-        Serial.printf("Common Buzzer      : %s (Channel %u)\n",
-                      cellHardware.getActiveAlertCount() > 0 ? "PULSING" : "SILENT",
-                      BUZZER_LEDC_CHANNEL);
-        Serial.println("------------------------------\n");
+        Serial.printf("Active Missed Events: %u\n", scheduleEngine.getMissedEventCount());
+        for (uint8_t i = 0; i < scheduleEngine.getMissedEventCount(); i++) {
+            const DoseEvent* ev = scheduleEngine.getMissedEvent(i);
+            if (ev) {
+                Serial.printf("  - MISSED: Cell %u (%s), %s, Sched: %02u:%02u\n",
+                              ev->cellIndex + 1, ev->cellId, ev->medicineName,
+                              ev->scheduledTime.hour, ev->scheduledTime.minute);
+            }
+        }
+        Serial.println("----------------------------------------\n");
         return;
     }
 
-    if (line.startsWith("DUE ")) {
+    if (upperLine.startsWith("TIME ")) {
+        // Syntax: TIME <HH> <MM> [SS]
+        String args = line.substring(5);
+        args.trim();
+        int h = 0, m = 0, s = 0;
+        int firstSpace = args.indexOf(' ');
+        if (firstSpace > 0) {
+            h = args.substring(0, firstSpace).toInt();
+            String rest = args.substring(firstSpace + 1);
+            rest.trim();
+            int secondSpace = rest.indexOf(' ');
+            if (secondSpace > 0) {
+                m = rest.substring(0, secondSpace).toInt();
+                s = rest.substring(secondSpace + 1).toInt();
+            } else {
+                m = rest.toInt();
+                s = 0;
+            }
+            if (h >= 0 && h < 24 && m >= 0 && m < 60 && s >= 0 && s < 60) {
+                rtc.adjust(DateTime(2026, 9, 28, h, m, s));
+                oledUi.requestRedraw();
+                Serial.printf("[COMMAND] Set RTC Time to %02d:%02d:%02d\n", h, m, s);
+                return;
+            }
+        }
+        Serial.println("Invalid format. Use: TIME <HH> <MM> [SS] (e.g., TIME 07 59 55)");
+        return;
+    }
+
+    if (upperLine.startsWith("GRACE ")) {
+        int minutes = line.substring(6).toInt();
+        if (minutes > 0 && minutes <= 120) {
+            scheduleEngine.setGracePeriodMinutes(minutes);
+            Serial.printf("[COMMAND] Grace period set to %d minutes\n", minutes);
+        } else {
+            Serial.println("Invalid grace period. Range: 1 to 120 minutes.");
+        }
+        return;
+    }
+
+    if (upperLine.startsWith("DUE ")) {
         int cellNum = line.substring(4).toInt();
-        if (cellNum >= 1 && cellNum <= (int)cellHardware.getCellCount()) {
+        if (cellNum >= 1 && cellNum <= (int)getHardwareCellCount()) {
             Serial.printf("[COMMAND] Triggering MEDICINE_DUE for Cell %d\n", cellNum);
-            cellHardware.triggerMedicineDue(cellNum - 1);
+            triggerHardwareMedicineDue(cellNum - 1);
         } else {
-            Serial.printf("Invalid cell number: %d (Available: 1 to %u)\n", cellNum, cellHardware.getCellCount());
+            Serial.printf("Invalid cell number: %d (Available: 1 to %u)\n", cellNum, getHardwareCellCount());
         }
-    } else if (line.startsWith("MISSED ")) {
+    } else if (upperLine.startsWith("MISSED ")) {
         int cellNum = line.substring(7).toInt();
-        if (cellNum >= 1 && cellNum <= (int)cellHardware.getCellCount()) {
+        if (cellNum >= 1 && cellNum <= (int)getHardwareCellCount()) {
             Serial.printf("[COMMAND] Triggering MISSED_DOSE for Cell %d\n", cellNum);
-            cellHardware.triggerMissedDose(cellNum - 1);
+            triggerHardwareMissedDose(cellNum - 1);
         } else {
-            Serial.printf("Invalid cell number: %d (Available: 1 to %u)\n", cellNum, cellHardware.getCellCount());
+            Serial.printf("Invalid cell number: %d (Available: 1 to %u)\n", cellNum, getHardwareCellCount());
         }
-    } else if (line.startsWith("CONFIRM ")) {
+    } else if (upperLine.startsWith("CONFIRM ")) {
         int cellNum = line.substring(8).toInt();
-        if (cellNum >= 1 && cellNum <= (int)cellHardware.getCellCount()) {
+        if (cellNum >= 1 && cellNum <= (int)getHardwareCellCount()) {
             Serial.printf("[COMMAND] Simulating CONFIRM for Cell %d\n", cellNum);
-            cellHardware.triggerDoseConfirmed(cellNum - 1);
+            scheduleEngine.handleCellButtonPress(cellNum - 1);
+            triggerHardwareDoseConfirmed(cellNum - 1);
         } else {
-            Serial.printf("Invalid cell number: %d (Available: 1 to %u)\n", cellNum, cellHardware.getCellCount());
+            Serial.printf("Invalid cell number: %d (Available: 1 to %u)\n", cellNum, getHardwareCellCount());
         }
-    } else if (line.startsWith("RESET ")) {
+    } else if (upperLine.startsWith("RESET ")) {
         int cellNum = line.substring(6).toInt();
-        if (cellNum >= 1 && cellNum <= (int)cellHardware.getCellCount()) {
+        if (cellNum >= 1 && cellNum <= (int)getHardwareCellCount()) {
             Serial.printf("[COMMAND] Resetting Cell %d to IDLE\n", cellNum);
-            cellHardware.triggerReset(cellNum - 1);
+            triggerHardwareReset(cellNum - 1);
+            scheduleEngine.dismissMissedDose(cellNum - 1);
         } else {
-            Serial.printf("Invalid cell number: %d (Available: 1 to %u)\n", cellNum, cellHardware.getCellCount());
+            Serial.printf("Invalid cell number: %d (Available: 1 to %u)\n", cellNum, getHardwareCellCount());
         }
-    } else if (line == "RESET") {
-        Serial.println("[COMMAND] Resetting all 4 cells to IDLE");
-        cellHardware.triggerResetAll();
+    } else if (upperLine == "RESET") {
+        Serial.println("[COMMAND] Resetting all 4 cells to IDLE & dismissing missed reminders");
+        triggerHardwareResetAll();
+        scheduleEngine.dismissAllMissedDoses();
     } else {
-        Serial.printf("Unknown command: '%s'. Try DUE 1, CONFIRM 1, MISSED 1, RESET 1, STATUS\n", line.c_str());
+        Serial.printf("Unknown command: '%s'. Available: TIME, STATUS, DUE <1-4>, CONFIRM <1-4>, MISSED <1-4>, RESET <1-4>, RESET\n", line.c_str());
     }
 }
