@@ -65,15 +65,15 @@
         {
             "cellId": "CELL04",
             "state": "OCCUPIED",
-            "currentStock": 8,
+            "currentStock": 4,
             "medicine": {
                 "medicineId": "MED004",
                 "name": "Pantocid",
                 "lowStockThreshold": 3,
                 "schedules": [
                     {
-                        "hour": 7,
-                        "minute": 0,
+                        "hour": 23,
+                        "minute": 50,
                         "doseQuantity": 1
                     }
                 ]

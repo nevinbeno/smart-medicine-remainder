@@ -22,7 +22,7 @@ public:
     static constexpr uint8_t SCREEN_HEIGHT = 64;
 
     explicit OledNotificationEngine(uint32_t rotationMs = 1800,
-                                    uint32_t statusMs = 1200);
+                                    uint32_t statusMs = 3000);
 
     /**
      * Attach the already-created Adafruit_SSD1306 display and scheduler.

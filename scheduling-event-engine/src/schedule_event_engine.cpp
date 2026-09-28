@@ -5,6 +5,7 @@ ScheduleEventEngine::ScheduleEventEngine()
       cellCount(0), dueEventCount(0), missedEventCount(0), callbackCount(0),
       nextEventId(0), firstRun(true)
 {
+    for (uint8_t i = 0; i < MAX_ENGINE_CELLS; i++) { lastWarnedStock[i] = 0xFFFFU; }
 }
 
 ScheduleEventEngine::ScheduleEventEngine(ITimeProvider* provider)
@@ -12,6 +13,7 @@ ScheduleEventEngine::ScheduleEventEngine(ITimeProvider* provider)
       cellCount(0), dueEventCount(0), missedEventCount(0), callbackCount(0),
       nextEventId(0), firstRun(true)
 {
+    for (uint8_t i = 0; i < MAX_ENGINE_CELLS; i++) { lastWarnedStock[i] = 0xFFFFU; }
 }
 
 void ScheduleEventEngine::setTimeProvider(ITimeProvider* provider)
@@ -314,8 +316,22 @@ void ScheduleEventEngine::checkLowStock()
 
     for (uint8_t i = 0; i < cellCount; i++)
     {
-        if (cells[i].hasMedicine && cells[i].currentStock <= cells[i].lowStockThreshold)
+        if (!cells[i].hasMedicine)
         {
+            continue;
+        }
+
+        const uint16_t stock = cells[i].currentStock;
+
+        if (stock <= cells[i].lowStockThreshold)
+        {
+            // Only fire once per stock level; avoids spamming every update() tick.
+            if (stock == lastWarnedStock[i])
+            {
+                continue;
+            }
+            lastWarnedStock[i] = stock;
+
             DoseEvent warnEvent;
             warnEvent.eventId = ++nextEventId;
             warnEvent.type = EventType::LOW_STOCK_WARNING;
@@ -331,10 +347,15 @@ void ScheduleEventEngine::checkLowStock()
             strncpy(warnEvent.medicineName, cells[i].medicineName, MAX_ENGINE_STRING_LEN - 1);
             warnEvent.medicineName[MAX_ENGINE_STRING_LEN - 1] = '\0';
 
-            warnEvent.doseQuantity = cells[i].currentStock;
+            warnEvent.doseQuantity = stock;
             warnEvent.triggeredTime = (timeProvider) ? timeProvider->getCurrentTime() : TimeOfDay();
 
             notifyListeners(warnEvent);
+        }
+        else
+        {
+            // Stock is above threshold; reset guard so a future drop triggers again.
+            lastWarnedStock[i] = 0xFFFFU;
         }
     }
 }
@@ -351,6 +372,7 @@ void ScheduleEventEngine::update()
     checkMidnightRollover(currentTime);
     checkSchedules(currentTime);
     checkGracePeriods(currentTime);
+    checkLowStock();   // Fires LOW_STOCK_WARNING when stock <= threshold (once per stock level)
 
     lastEvaluatedTime = currentTime;
     firstRun = false;

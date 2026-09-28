@@ -151,6 +151,12 @@ private:
     TimeOfDay lastEvaluatedTime;
     bool firstRun;
 
+    // Per-cell guard: tracks the stock level at which a LOW_STOCK_WARNING was last
+    // fired. A new warning is only emitted when the stock changes to a different
+    // (lower) value, preventing repeated events on every update() tick.
+    // Initialised to 0xFFFF ("never warned").
+    uint16_t lastWarnedStock[MAX_ENGINE_CELLS];
+
     void notifyListeners(const DoseEvent& event);
     void checkSchedules(const TimeOfDay& currentTime);
     void checkGracePeriods(const TimeOfDay& currentTime);

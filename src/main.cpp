@@ -59,6 +59,15 @@ void onScheduleEngineEvent(const DoseEvent& event, void* /*userData*/) {
         case EventType::DOSE_CONFIRMED:
             Serial.printf("\n>>> [SCHEDULER] DOSE_CONFIRMED: Cell %u (%s) - %s (Dose %u taken)\n",
                           event.cellIndex + 1, event.cellId, event.medicineName, event.doseQuantity);
+            // Decrement stock in the engine so low-stock checks run against real data.
+            {
+                EngineCell* cell = scheduleEngine.getCellMutable(event.cellIndex);
+                if (cell && cell->currentStock > 0) {
+                    cell->currentStock--;
+                    Serial.printf("[STOCK] Cell %u (%s) stock decremented to %u\n",
+                                  event.cellIndex + 1, event.cellId, cell->currentStock);
+                }
+            }
             // Trigger 4-Cell Hardware: LED GREEN for 1s, Servo CLOSED
             triggerHardwareDoseConfirmed(event.cellIndex);
             break;
@@ -158,17 +167,18 @@ void setup() {
 
     Serial.println("=================================================================");
     Serial.println(" Smart Medicine Reminder System - Fully Integrated");
-    Serial.println(" Features Active: Scheduling + Dynamic Config + OLED + 4-Cell HW");
+    Serial.println(" Active: Scheduling + Dynamic Config + OLED + 4-Cell HW");
     Serial.println("=================================================================");
-    Serial.println("Interactive Commands via Serial Monitor:");
-    Serial.println("  STATUS            - Print full hardware, scheduler & event status");
-    Serial.println("  CONFIRM <1-4>     - Confirm dose for Cell X (simulates button press)");
-    Serial.println("  DUE <1-4>         - Manually trigger MEDICINE_DUE for Cell X");
-    Serial.println("  MISSED <1-4>      - Manually trigger MISSED_DOSE for Cell X");
-    Serial.println("  RESET <1-4>       - Reset Cell X to IDLE");
-    Serial.println("  RESET             - Reset all cells to IDLE & dismiss all reminders");
-    Serial.println("  TIME <HH> <MM> [SS] - Set RTC time (e.g., TIME 07 59 55 or TIME 21 59 55)");
-    Serial.println("  GRACE <minutes>   - Set missed dose grace period in minutes");
+    Serial.println("Serial Commands:");
+    Serial.println("  STATUS              - Print full hardware, scheduler & event status");
+    Serial.println("  CONFIRM <1-4>       - Confirm dose for Cell X (decrements stock)");
+    Serial.println("  DUE <1-4>           - Manually trigger MEDICINE_DUE for Cell X");
+    Serial.println("  MISSED <1-4>        - Manually trigger MISSED_DOSE for Cell X");
+    Serial.println("  RESET <1-4>         - Reset Cell X to IDLE");
+    Serial.println("  RESET               - Reset all cells & dismiss all reminders");
+    Serial.println("  LOWSTOCK <1-4>      - Simulate low stock for Cell X (OLED alert)");
+    Serial.println("  TIME <HH> <MM> [SS] - Set RTC time (e.g., TIME 07 59 55)");
+    Serial.println("  GRACE <minutes>     - Set missed dose grace period in minutes");
     Serial.println("Or click buttons 'Btn 1' - 'Btn 4' on virtual board!");
     Serial.println("=================================================================");
 }
@@ -339,7 +349,19 @@ void handleSerialCommands() {
         Serial.println("[COMMAND] Resetting all 4 cells to IDLE & dismissing missed reminders");
         triggerHardwareResetAll();
         scheduleEngine.dismissAllMissedDoses();
+    } else if (upperLine.startsWith("LOWSTOCK ")) {
+        // Manually set a cell's stock to 1 to trigger a LOW_STOCK_WARNING on next engine tick.
+        int cellNum = line.substring(9).toInt();
+        if (cellNum >= 1 && cellNum <= (int)scheduleEngine.getCellCount()) {
+            EngineCell* cell = scheduleEngine.getCellMutable(cellNum - 1);
+            if (cell) {
+                cell->currentStock = 1;  // Force stock below any threshold
+                Serial.printf("[COMMAND] Cell %d stock forced to 1 (LOW_STOCK_WARNING expected on next update)\n", cellNum);
+            }
+        } else {
+            Serial.printf("Invalid cell number: %d (Available: 1 to %u)\n", cellNum, scheduleEngine.getCellCount());
+        }
     } else {
-        Serial.printf("Unknown command: '%s'. Available: TIME, STATUS, DUE <1-4>, CONFIRM <1-4>, MISSED <1-4>, RESET <1-4>, RESET\n", line.c_str());
+        Serial.printf("Unknown command: '%s'. Try: STATUS, DUE, CONFIRM, MISSED, RESET, LOWSTOCK, TIME, GRACE\n", line.c_str());
     }
 }

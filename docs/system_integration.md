@@ -12,7 +12,6 @@ This document describes the complete integration between:
 
 ## 2. Architecture & Event Flow
 
-```
                            +-------------------------------------+
                            | medicine-cell-data/config/          |
                            | configuration.json (Flash Embedded) |
@@ -25,28 +24,29 @@ This document describes the complete integration between:
                                               |
                                               v (ConfigurationAdapter::loadIntoEngine)
 +-----------------------+  Tick / Now()       v
-| DS1307 Real-Time Clock| ------------> +-------------------------------------+
+| DS1307 Real-Time Clock| -----------> +-------------------------------------+
 | (RTCTimeProvider)     |               | ScheduleEventEngine                 |
 +-----------------------+               | - Multi-cell schedule evaluation    |
                                         | - Simultaneous dose detection       |
                                         | - Grace period (Due -> Missed)      |
+                                        | - Low-stock check on every tick     |
                                         +-------------------------------------+
                                               |
-                                              | Emits DoseEvent
-                   +--------------------------+--------------------------+
-                   | (DOSE_DUE, DOSE_MISSED,                             |
-                   |  DOSE_CONFIRMED, DOSE_DISMISSED)                    |
-                   v                                                     v
+                                              | Emits DoseEvent to all listeners
+                   +--------------------------+---------------------------+
+                   | (DOSE_DUE, DOSE_MISSED,                              |
+                   |  DOSE_CONFIRMED, DOSE_DISMISSED, LOW_STOCK_WARNING)  |
+                   v                                                      v
 +------------------------------------+               +------------------------------------+
 | OledNotificationEngine (Role 3)    |               | HardwareBridge -> CellHardware (4) |
 | - Clock Screen (Time & Next Dose)  |               | - Cell 1: Red GPIO 25, Grn 26,     |
 | - Medicine Due Screen (Take Med)   |               |           Btn 32, Servo GPIO 18    |
 | - Missed Dose Screen (Warning)     |               | - Cell 2: Red GPIO 14, Grn 16,     |
 | - Dose Confirmed Screen (Taken)    |               |           Btn 33, Servo GPIO 19    |
-| - Multi-notification auto-rotation |               | - Cell 3: Red GPIO 13, Grn 12,     |
-+------------------------------------+               |           Btn 27, Servo GPIO 5     |
-                                                     | - Cell 4: Red GPIO 4,  Grn 2,      |
-                                                     |           Btn 23, Servo GPIO 17    |
+| - Reminder Cleared (Dismissed)     |               | - Cell 3: Red GPIO 13, Grn 12,     |
+| - Low Stock Warning Screen         |               |           Btn 27, Servo GPIO 5     |
+| - Multi-notification auto-rotation |               | - Cell 4: Red GPIO 4,  Grn 2,      |
++------------------------------------+               |           Btn 23, Servo GPIO 17    |
                                                      | - Common Buzzer: GPIO 15 (Tone)    |
                                                      +------------------------------------+
                                                                          |
@@ -55,6 +55,7 @@ This document describes the complete integration between:
                                                      +------------------------------------+
                                                      | onHardwareDoseConfirmed(cellId)    |
                                                      | -> engine.handleCellButtonPress()  |
+                                                     | -> Decrements engine cell stock    |
                                                      +------------------------------------+
 ```
 
@@ -86,11 +87,12 @@ Instead of hard-coding medicines, cell compartments, and schedule hours in code,
 
 | Event Type | Scheduling Trigger | 4-Cell Hardware Behavior | OLED UI Display |
 | :--- | :--- | :--- | :--- |
-| **`DOSE_DUE`** | RTC time matches scheduled hour & minute | - Correct cell RGB LED turns **RED**<br>- Correct cell Servo **OPENS to 90°**<br>- Common Buzzer **pulses (300ms on/off)** | - Title: `MEDICINE DUE`<br>- Shows Medicine name, Cell ID, Scheduled Time, and `TAKE MEDICINE`<br>- Rotates every 1.8s if multiple doses are due |
-| **`DOSE_MISSED`** | Grace period (default 5 min) expires without confirmation | - Correct cell RGB LED turns **YELLOW** (Warning)<br>- Correct cell Servo **CLOSES to 0°**<br>- Buzzer **stops** for this cell | - Title: `MISSED DOSE`<br>- Shows Medicine name, Cell ID, Scheduled Time, and `PRESS CONFIRM` |
-| **Physical Button Pressed** | Patient presses physical debounced button on cell | - Cell RGB LED turns **GREEN for 1 sec**<br>- Cell Servo **CLOSES to 0°** immediately<br>- Common Buzzer re-arbitrated (keeps beeping if other cells are still due, stops if count = 0)<br>- Emits `DOSE_CONFIRMED` or `DOSE_DISMISSED` | - Title: `DOSE CONFIRMED` or `REMINDER CLEARED`<br>- Shows Medicine name, Cell ID, and `DOSE 1 TAKEN`<br>- Held for 1.2s then returns to next alert or clock |
-| **`DOSE_DISMISSED`** | Patient confirms a missed dose warning | - Cell Yellow LED turns **OFF** (returns to IDLE) | - Title: `REMINDER CLEARED`<br>- Returns to normal clock screen |
-| **Idle State** | No due or missed doses active | - All LEDs OFF<br>- All Servos CLOSED (0°)<br>- Buzzer SILENT | - Title: `SMART MEDICINE`<br>- Header: `CURRENT TIME`<br>- Digital Clock: `HH:MM:SS`<br>- Footer: `NEXT HH:MM:SS <MedicineName>` |
+| **`DOSE_DUE`** | RTC time matches scheduled hour & minute | - Correct cell RGB LED → **RED**<br>- Correct cell Servo **OPENS to 90°**<br>- Common Buzzer **pulses (300ms on/off)** | Title: `MEDICINE DUE`<br>Shows medicine name, Cell ID, scheduled time, `TAKE MEDICINE`<br>Rotates every 1.8 s if multiple doses are due |
+| **`DOSE_MISSED`** | Grace period (default 5 min) expires without confirmation | - Correct cell RGB LED → **YELLOW** (Warning)<br>- Correct cell Servo **CLOSES to 0°**<br>- Buzzer **stops** for this cell | Title: `MISSED DOSE`<br>Shows medicine name, Cell ID, scheduled time, `PRESS CONFIRM` |
+| **`DOSE_CONFIRMED`** | Patient presses physical debounced button while dose is DUE | - Cell RGB LED → **GREEN for 1 s**<br>- Cell Servo **CLOSES to 0°**<br>- Common Buzzer re-arbitrated<br>- **Engine cell stock decremented by 1** | Title: `DOSE CONFIRMED`<br>Shows medicine name, Cell ID, `DOSE 1 TAKEN`<br>Held for 3 s then returns to next alert or clock |
+| **`DOSE_DISMISSED`** | Patient presses button while dose is MISSED (missed reminder dismissed) | - Cell Yellow LED **OFF** (returns to IDLE) | Title: `REMINDER CLEARED`<br>Shows medicine name, Cell ID<br>Held for 3 s then returns to clock |
+| **`LOW_STOCK_WARNING`** | `currentStock <= lowStockThreshold` detected on engine tick after a dose confirmation | - No hardware change (informational only) | Title: `LOW STOCK WARNING`<br>Shows medicine name, Cell ID, `STOCK: <n>`<br>Held for 3 s then returns to clock |
+| **Idle State** | No due or missed doses active | - All LEDs OFF<br>- All Servos CLOSED (0°)<br>- Buzzer SILENT | Title: `SMART MEDICINE`<br>Header: `CURRENT TIME`<br>Digital Clock: `HH:MM:SS`<br>Footer: `NEXT HH:MM:SS <MedicineName>` |
 
 ---
 
@@ -119,14 +121,16 @@ You can type these commands in the Serial Monitor (115200 baud) at any time:
 
 | Command | Description | What to Expect |
 | :--- | :--- | :--- |
-| `STATUS` | Dumps complete diagnostic state | Shows state of all 4 cells, servo angles, buzzer status, active due events, and active missed events. |
-| `TIME <HH> <MM> [SS]` | Adjusts RTC time | E.g. `TIME 07 59 55` advances to 5 seconds before Paracetamol (08:00). After 5s, Servo 1 opens, LED 1 turns RED, Buzzer pulses, and OLED displays Paracetamol alert! |
-| `TIME 21 59 55` | Test simultaneous doses | Reaches 22:00:00. Servos 2 & 3 open simultaneously. OLED rotates between Cetirizine and Amoxicillin! |
-| `CONFIRM <1-4>` | Simulates button press | Confirms dose for Cell X. That cell's servo closes, LED turns green, and OLED displays `DOSE CONFIRMED`. |
-| `DUE <1-4>` | Manually triggers DUE | Directly triggers medicine due state for Cell X. |
-| `MISSED <1-4>` | Manually triggers MISSED | Directly triggers warning state (Yellow LED, closed servo) for Cell X. |
+| `STATUS` | Full diagnostic state dump | Shows state of all 4 cells, servo angles, buzzer status, active due events, and active missed events. |
+| `TIME <HH> <MM> [SS]` | Adjusts RTC time | E.g. `TIME 07 59 55` puts the clock 5 s before Pantocid (07:00). After 5 s, Servo 4 opens, LED 4 turns RED, Buzzer pulses, OLED shows Pantocid alert. |
+| `TIME 21 59 55` | Test simultaneous doses | Reaches 22:00:00. Servos 2 & 3 open simultaneously. OLED rotates between Cetirizine and Amoxicillin. |
+| `CONFIRM <1-4>` | Simulates button press on a DUE cell | Confirms dose; servo closes, LED turns green, OLED shows `DOSE CONFIRMED`. Also **decrements engine stock** — trigger `LOWSTOCK` after enough confirms. |
+| `DUE <1-4>` | Manually triggers DUE state | Directly activates medicine-due state for Cell X. |
+| `MISSED <1-4>` | Manually triggers MISSED state | Puts Cell X into yellow warning state. |
+| `RESET <1-4>` | Resets single cell | Resets Cell X to IDLE and dismisses its missed reminder (OLED shows `REMINDER CLEARED` for 3 s). |
+| `RESET` | Global reset | Resets all cells and clears all pending reminders. |
+| `LOWSTOCK <1-4>` | **Simulates low stock for Cell X** | Forces `currentStock` to 1 for Cell X. On the next engine tick, a `LOW_STOCK_WARNING` event fires. OLED shows `LOW STOCK WARNING` with medicine name and remaining count for 3 s. |
 | `GRACE <minutes>` | Sets grace period | Adjusts grace period before due alerts transition to missed (e.g. `GRACE 1`). |
-| `RESET` | Global reset | Resets all cells to IDLE and clears all pending reminders. |
 
 ---
 
