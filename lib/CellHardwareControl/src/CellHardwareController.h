@@ -16,8 +16,10 @@
  */
 class CellHardwareController {
 private:
-    CellHardware* _cells[MAX_CELLS];
+    CellHardware* _cells[HW_MAX_CELLS];
     uint8_t _cellCount;
+    uint8_t _gridRows;
+    uint8_t _gridCols;
 
     BuzzerController _buzzer;
 
@@ -30,18 +32,18 @@ private:
 public:
     /**
      * @brief Construct the hardware controller.
-     * @param cellCount Number of active cells (defaults to ACTIVE_CELL_COUNT = 4).
+     * @param cellCount Number of active cells (defaults to DEFAULT_CELL_COUNT = 4).
      * @param pinConfigs Array of pin configuration structs.
      * @param pinBuzzer GPIO pin for common alert buzzer.
      */
-    CellHardwareController(uint8_t cellCount = ACTIVE_CELL_COUNT,
+    CellHardwareController(uint8_t cellCount = DEFAULT_CELL_COUNT,
                            const CellPinConfig* pinConfigs = DEFAULT_CELL_PIN_CONFIGS,
                            int8_t pinBuzzer = PIN_COMMON_BUZZER);
 
     ~CellHardwareController();
 
     /**
-     * @brief Initialize all 4 cell GPIOs, debouncers, RGB LEDs, servos, and the common buzzer.
+     * @brief Initialize all cell GPIOs, debouncers, RGB LEDs, servos, and the common buzzer.
      */
     void begin();
 
@@ -49,6 +51,35 @@ public:
      * @brief Non-blocking master update loop. Call continuously in main loop().
      */
     void update();
+
+    /**
+     * @brief Dynamically set the number of active cells at runtime.
+     * @param count Desired active cell count (1 to HW_MAX_CELLS).
+     * @return True if valid and applied, false otherwise.
+     */
+    bool setCellCount(uint8_t count);
+
+    /**
+     * @brief Configure scalable matrix grid dimensions (e.g. 2x2, 4x4, 8x8).
+     * @param rows Number of rows (1 to HW_MAX_GRID_ROWS).
+     * @param cols Number of columns (1 to HW_MAX_GRID_COLS).
+     * @return True if valid and applied, false otherwise.
+     */
+    bool setGrid(uint8_t rows, uint8_t cols);
+
+    uint8_t getGridRows() const { return _gridRows; }
+    uint8_t getGridCols() const { return _gridCols; }
+
+    /**
+     * @brief Convert 1-indexed (row, col) matrix coordinates to 0-indexed linear cell index.
+     * @return 0-indexed cell index, or -1 if coordinates are out of bounds.
+     */
+    int8_t gridCoordsToIndex(uint8_t row, uint8_t col) const;
+
+    /**
+     * @brief Convert 0-indexed linear cell index to 1-indexed (row, col) matrix coordinates.
+     */
+    bool indexToGridCoords(uint8_t cellIndex, uint8_t& outRow, uint8_t& outCol) const;
 
     // ========================================================================
     // INBOUND EVENT INTERFACES
@@ -92,9 +123,18 @@ public:
     bool triggerReset(uint8_t cellId);
 
     /**
-     * @brief Force reset all 4 cells to IDLE and silence buzzer.
+     * @brief Force reset all active cells to IDLE and silence buzzer.
      */
     void triggerResetAll();
+
+    // ========================================================================
+    // MATRIX GRID COORDINATE TRIGGERS (1-INDEXED ROW, COL)
+    // ========================================================================
+    bool triggerMedicineDueGrid(uint8_t row, uint8_t col);
+    bool triggerMissedDoseGrid(uint8_t row, uint8_t col);
+    bool triggerWarningGrid(uint8_t row, uint8_t col) { return triggerMissedDoseGrid(row, col); }
+    bool triggerDoseConfirmedGrid(uint8_t row, uint8_t col);
+    bool triggerResetGrid(uint8_t row, uint8_t col);
 
     // ========================================================================
     // OUTBOUND EVENT REGISTRATION
@@ -110,6 +150,7 @@ public:
     uint8_t getCellCount() const { return _cellCount; }
     uint8_t getActiveAlertCount() const { return calculateAlertingCount(); }
     CellState getCellState(uint8_t cellId) const;
+    CellState getCellStateGrid(uint8_t row, uint8_t col) const;
     bool isCellAlerting(uint8_t cellId) const;
     bool isCellWarning(uint8_t cellId) const;
     bool isCellConfirmed(uint8_t cellId) const;

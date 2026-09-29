@@ -27,11 +27,36 @@ static void internalStateChangedCallback(uint8_t cellId, CellState oldState, Cel
                   cellId + 1, cellStateToString(oldState), cellStateToString(newState));
 }
 
-void initHardwareBridge(BridgeConfirmCallback onConfirm) {
+void initHardwareBridge(BridgeConfirmCallback onConfirm, uint8_t activeCellCount) {
     g_bridgeConfirmCallback = onConfirm;
     cellHardware.setConfirmationCallback(internalConfirmCallback);
     cellHardware.setStateChangedCallback(internalStateChangedCallback);
+    cellHardware.setCellCount(activeCellCount);
     cellHardware.begin();
+}
+
+bool setHardwareCellCount(uint8_t cellCount) {
+    return cellHardware.setCellCount(cellCount);
+}
+
+bool setHardwareGrid(uint8_t rows, uint8_t cols) {
+    return cellHardware.setGrid(rows, cols);
+}
+
+uint8_t getHardwareGridRows() {
+    return cellHardware.getGridRows();
+}
+
+uint8_t getHardwareGridCols() {
+    return cellHardware.getGridCols();
+}
+
+int8_t getHardwareCellIndex(uint8_t row, uint8_t col) {
+    return cellHardware.gridCoordsToIndex(row, col);
+}
+
+bool getHardwareCellGridCoords(uint8_t cellIndex, uint8_t& outRow, uint8_t& outCol) {
+    return cellHardware.indexToGridCoords(cellIndex, outRow, outCol);
 }
 
 void updateHardwareBridge() {
@@ -58,6 +83,22 @@ void triggerHardwareResetAll() {
     cellHardware.triggerResetAll();
 }
 
+bool triggerHardwareMedicineDueGrid(uint8_t row, uint8_t col) {
+    return cellHardware.triggerMedicineDueGrid(row, col);
+}
+
+bool triggerHardwareMissedDoseGrid(uint8_t row, uint8_t col) {
+    return cellHardware.triggerMissedDoseGrid(row, col);
+}
+
+bool triggerHardwareDoseConfirmedGrid(uint8_t row, uint8_t col) {
+    return cellHardware.triggerDoseConfirmedGrid(row, col);
+}
+
+bool triggerHardwareResetGrid(uint8_t row, uint8_t col) {
+    return cellHardware.triggerResetGrid(row, col);
+}
+
 uint8_t getHardwareCellCount() {
     return cellHardware.getCellCount();
 }
@@ -81,19 +122,38 @@ uint8_t getHardwareCellServoAngle(uint8_t cellIndex) {
 }
 
 void printHardwareStatus() {
-    Serial.println("\n--- 4-CELL HARDWARE STATUS ---");
-    for (uint8_t i = 0; i < cellHardware.getCellCount(); i++) {
-        CellHardware* c = cellHardware.getCell(i);
-        Serial.printf("Cell %u: %-22s | Servo %u: %s (%u deg)\n",
-                      i + 1,
-                      cellStateToString(cellHardware.getCellState(i)),
-                      i + 1,
-                      (c && c->getServo().isOpen()) ? "OPEN" : "CLOSED",
-                      c ? c->getServo().getCurrentAngle() : 0);
+    uint8_t rows = cellHardware.getGridRows();
+    uint8_t cols = cellHardware.getGridCols();
+    uint8_t total = cellHardware.getCellCount();
+
+    Serial.println("\n=======================================================");
+    Serial.printf(" HARDWARE STATUS: Matrix Grid [%ux%u] = %u Active Cells\n", rows, cols, total);
+    Serial.printf(" Physical Direct GPIOs : Cells 1..%u\n",
+                  HW_DIRECT_PIN_CELLS < total ? HW_DIRECT_PIN_CELLS : total);
+    if (total > HW_DIRECT_PIN_CELLS) {
+        Serial.printf(" Virtual/Expander GPIOs: Cells %u..%u\n", HW_DIRECT_PIN_CELLS + 1, total);
     }
-    Serial.printf("Active Alert Count : %u\n", cellHardware.getActiveAlertCount());
-    Serial.printf("Common Buzzer      : %s (Channel %u)\n",
+    Serial.printf(" Active Alerts         : %u\n", cellHardware.getActiveAlertCount());
+    Serial.printf(" Common Buzzer         : %s (Channel %u)\n",
                   cellHardware.getActiveAlertCount() > 0 ? "PULSING" : "SILENT",
                   BUZZER_LEDC_CHANNEL);
-    Serial.println("------------------------------\n");
+    Serial.println("-------------------------------------------------------");
+    Serial.println(" Compartment Grid Matrix [Cell (Row,Col): State | Servo Angle]:");
+
+    for (uint8_t r = 1; r <= rows; r++) {
+        Serial.printf("  Row %u: ", r);
+        for (uint8_t c = 1; c <= cols; c++) {
+            int8_t idx = cellHardware.gridCoordsToIndex(r, c);
+            if (idx >= 0) {
+                CellHardware* cell = cellHardware.getCell((uint8_t)idx);
+                const char* st = cellHardware.isCellAlerting((uint8_t)idx) ? "DUE" :
+                                 (cellHardware.isCellWarning((uint8_t)idx) ? "MISSED" :
+                                 (cellHardware.isCellConfirmed((uint8_t)idx) ? "CONFIRM" : "IDLE"));
+                uint8_t angle = (cell ? cell->getServo().getCurrentAngle() : 0);
+                Serial.printf("[C%02u: %-7s %2u°] ", idx + 1, st, angle);
+            }
+        }
+        Serial.println();
+    }
+    Serial.println("=======================================================\n");
 }

@@ -21,6 +21,7 @@ OledNotificationEngine::OledNotificationEngine(uint32_t rotationMs_,
       attached(false),
       hasLastEvent(false)
 {
+    strncpy(gridLabel, "[2x2]", sizeof(gridLabel));
 }
 
 bool OledNotificationEngine::begin(Adafruit_SSD1306& displayRef,
@@ -239,7 +240,18 @@ void OledNotificationEngine::drawClockScreen()
 
     display->setTextSize(1);
     display->setCursor(0, 0);
-    display->println("SMART MEDICINE");
+    display->print("SMART MEDICINE");
+
+    // Display scalable grid indicator in the header (e.g. "[8x8]")
+    if (gridLabel[0] != '\0')
+    {
+        int16_t x = 128 - static_cast<int16_t>(strlen(gridLabel) * 6);
+        if (x > 84)
+        {
+            display->setCursor(x, 0);
+            display->print(gridLabel);
+        }
+    }
 
     display->drawLine(0, 10, 127, 10, SSD1306_WHITE);
 
@@ -480,3 +492,15 @@ void OledNotificationEngine::printClipped(const char* text, uint8_t maxChars)
         // beyond the OLED edge.
     }
 }
+
+void OledNotificationEngine::setGridLabel(const char* label)
+{
+    if (label)
+    {
+        strncpy(gridLabel, label, sizeof(gridLabel) - 1);
+        gridLabel[sizeof(gridLabel) - 1] = '\0';
+        requestRedraw();
+    }
+}
+
+

@@ -125,20 +125,12 @@ void setup() {
     }
     Serial.println("RTC initialized!");
 
-    // 3. Initialize Role 4: Cell Hardware & Alert Control (4 Cells, 4 Servos, Common Buzzer)
-    initHardwareBridge(onHardwareDoseConfirmed);
-    Serial.println("Role 4: 4-Cell Hardware & Alert Control initialized!");
-
-    // 4. Initialize Role 2: Scheduling & Time/Event Engine
-    scheduleEngine.setTimeProvider(&rtcTimeProvider);
-    scheduleEngine.setGracePeriodMinutes(5); // 5-minute grace window for alerts before marking MISSED
-    scheduleEngine.registerEventCallback(onScheduleEngineEvent);
-
-    // 5. Load dynamic configuration from embedded configuration.json (No hardcoding!)
+    // 3. Load dynamic configuration from embedded configuration.json (No hardcoding!)
     size_t configLen = configuration_json_end - configuration_json_start;
     std::string configJson(reinterpret_cast<const char*>(configuration_json_start), configLen);
 
     RuntimeConfiguration runtimeConfig;
+    uint8_t targetCellCount = 4;
     if (loadConfiguration(configJson.c_str(), runtimeConfig)) {
         Serial.printf("[CONFIG] Successfully loaded configuration.json (%u cells configured):\n", runtimeConfig.cellCount);
         for (uint8_t i = 0; i < runtimeConfig.cellCount; i++) {
@@ -152,10 +144,27 @@ void setup() {
                               c.medicine.schedules[s].doseQuantity);
             }
         }
+        if (runtimeConfig.cellCount > 0 && runtimeConfig.cellCount <= 4) {
+            targetCellCount = runtimeConfig.cellCount;
+        }
+    } else {
+        Serial.println("[CONFIG] ERROR: Failed to parse configuration.json! Defaulting to 4 cells.");
+    }
+
+    Serial.printf("[INIT] Starting system with %u active cell(s).\n\n", targetCellCount);
+
+    // 4. Initialize Role 4: Cell Hardware & Alert Control with dynamic cell count
+    initHardwareBridge(onHardwareDoseConfirmed, targetCellCount);
+    Serial.printf("Role 4: Cell Hardware & Alert Control initialized with %u active cells (Grid [%ux%u])!\n",
+                  targetCellCount, getHardwareGridRows(), getHardwareGridCols());
+
+    // 5. Initialize Role 2: Scheduling & Time/Event Engine
+    scheduleEngine.setTimeProvider(&rtcTimeProvider);
+    scheduleEngine.setGracePeriodMinutes(5); // 5-minute grace window for alerts before marking MISSED
+    scheduleEngine.registerEventCallback(onScheduleEngineEvent);
+    if (runtimeConfig.cellCount > 0) {
         ConfigurationAdapter::loadIntoEngine(runtimeConfig, scheduleEngine);
         Serial.println("[CONFIG] Schedules dynamically loaded into Scheduling Engine!");
-    } else {
-        Serial.println("[CONFIG] ERROR: Failed to parse configuration.json!");
     }
 
     // 6. Initialize Role 3: OLED UI & Notification Engine
@@ -163,19 +172,25 @@ void setup() {
         Serial.println("OLED UI initialization failed!");
         while (true);
     }
+    char initGridLabel[16];
+    snprintf(initGridLabel, sizeof(initGridLabel), "[%ux%u]", getHardwareGridRows(), getHardwareGridCols());
+    oledUi.setGridLabel(initGridLabel);
     Serial.println("Role 3: OLED UI & Notification Engine initialized!");
 
     Serial.println("=================================================================");
-    Serial.println(" Smart Medicine Reminder System - Fully Integrated");
-    Serial.println(" Active: Scheduling + Dynamic Config + OLED + 4-Cell HW");
+    Serial.println(" Smart Medicine Reminder System - Scalable Matrix Hardware Active");
+    Serial.printf(" Matrix Grid: [%ux%u] | Cells: %u | Common Buzzer: ON\n",
+                  getHardwareGridRows(), getHardwareGridCols(), getHardwareCellCount());
     Serial.println("=================================================================");
     Serial.println("Serial Commands:");
-    Serial.println("  STATUS              - Print full hardware, scheduler & event status");
-    Serial.println("  CONFIRM <1-4>       - Confirm dose for Cell X (decrements stock)");
-    Serial.println("  DUE <1-4>           - Manually trigger MEDICINE_DUE for Cell X");
-    Serial.println("  MISSED <1-4>        - Manually trigger MISSED_DOSE for Cell X");
-    Serial.println("  RESET <1-4>         - Reset Cell X to IDLE");
-    Serial.println("  RESET               - Reset all cells & dismiss all reminders");
+    Serial.println("  STATUS              - Print full visual matrix hardware & event status");
+    Serial.println("  GRID <RxC>          - Scale matrix grid (e.g. GRID 2x2, GRID 4x4, GRID 8x8)");
+    Serial.println("  CELLS <1-64>        - Dynamically set number of active cells");
+    Serial.println("  CONFIRM <id | r,c>  - Confirm dose for Cell (e.g. CONFIRM 1 or CONFIRM 2,1)");
+    Serial.println("  DUE <id | r,c>      - Manually trigger MEDICINE_DUE for Cell (or row,col)");
+    Serial.println("  MISSED <id | r,c>   - Manually trigger MISSED_DOSE for Cell (or row,col)");
+    Serial.println("  RESET <id | r,c>    - Reset Cell (or row,col) to IDLE");
+    Serial.println("  RESET               - Reset all active cells & dismiss all reminders");
     Serial.println("  LOWSTOCK <1-4>      - Simulate low stock for Cell X (OLED alert)");
     Serial.println("  TIME <HH> <MM> [SS] - Set RTC time (e.g., TIME 07 59 55)");
     Serial.println("  GRACE <minutes>     - Set missed dose grace period in minutes");
@@ -300,6 +315,74 @@ void handleSerialCommands() {
         return;
     }
 
+    auto parseCellArg = [](const String& arg) -> int {
+        int commaIdx = arg.indexOf(',');
+        if (commaIdx > 0) {
+            int r = arg.substring(0, commaIdx).toInt();
+            int c = arg.substring(commaIdx + 1).toInt();
+            int8_t idx = getHardwareCellIndex((uint8_t)r, (uint8_t)c);
+            if (idx >= 0) return idx + 1; // return 1-indexed cell number
+            return -1;
+        }
+        return arg.toInt();
+    };
+
+    if (upperLine.startsWith("GRID ")) {
+        String args = line.substring(5);
+        args.trim();
+        int r = 0, c = 0;
+        int xPos = args.indexOf('x');
+        if (xPos < 0) xPos = args.indexOf('X');
+        int spacePos = args.indexOf(' ');
+
+        if (xPos > 0) {
+            r = args.substring(0, xPos).toInt();
+            c = args.substring(xPos + 1).toInt();
+        } else if (spacePos > 0) {
+            r = args.substring(0, spacePos).toInt();
+            c = args.substring(spacePos + 1).toInt();
+        }
+
+        if (r >= 1 && r <= 8 && c >= 1 && c <= 8 && (r * c) <= 64) {
+            bool ok = setHardwareGrid((uint8_t)r, (uint8_t)c);
+            if (ok) {
+                Serial.printf("[COMMAND] Hardware grid scaled to [%ux%u] = %u active cells!\n", r, c, r * c);
+                printHardwareStatus();
+
+                char gridStr[16];
+                snprintf(gridStr, sizeof(gridStr), "[%ux%u]", r, c);
+                oledUi.setGridLabel(gridStr);
+            } else {
+                Serial.printf("[COMMAND] Failed to set hardware grid [%ux%u].\n", r, c);
+            }
+        } else {
+            Serial.println("Invalid grid dimensions. Max: 8x8 (64 cells). E.g.: GRID 2 2, GRID 4 4, GRID 8 8, GRID 4x4");
+        }
+        return;
+    }
+
+    if (upperLine.startsWith("CELLS ") || upperLine.startsWith("SET_CELLS ")) {
+        int spaceIdx = upperLine.indexOf(' ');
+        int count = line.substring(spaceIdx + 1).toInt();
+        if (count >= 1 && count <= 64) {
+            bool ok = setHardwareCellCount((uint8_t)count);
+            if (ok) {
+                Serial.printf("[COMMAND] Dynamic active cell count updated to %d cell(s) (Grid [%ux%u])!\n",
+                              count, getHardwareGridRows(), getHardwareGridCols());
+                printHardwareStatus();
+
+                char gridStr[16];
+                snprintf(gridStr, sizeof(gridStr), "[%ux%u]", getHardwareGridRows(), getHardwareGridCols());
+                oledUi.setGridLabel(gridStr);
+            } else {
+                Serial.printf("[COMMAND] Failed to set cell count to %d.\n", count);
+            }
+        } else {
+            Serial.println("Invalid cell count. Range: 1 to 64 cells (e.g., CELLS 16).");
+        }
+        return;
+    }
+
     if (upperLine.startsWith("GRACE ")) {
         int minutes = line.substring(6).toInt();
         if (minutes > 0 && minutes <= 120) {
@@ -312,41 +395,61 @@ void handleSerialCommands() {
     }
 
     if (upperLine.startsWith("DUE ")) {
-        int cellNum = line.substring(4).toInt();
+        String arg = line.substring(4);
+        arg.trim();
+        int cellNum = parseCellArg(arg);
         if (cellNum >= 1 && cellNum <= (int)getHardwareCellCount()) {
-            Serial.printf("[COMMAND] Triggering MEDICINE_DUE for Cell %d\n", cellNum);
+            uint8_t r = 0, c = 0;
+            getHardwareCellGridCoords(cellNum - 1, r, c);
+            Serial.printf("[COMMAND] Triggering MEDICINE_DUE for Cell %d (Row %u, Col %u)\n", cellNum, r, c);
             triggerHardwareMedicineDue(cellNum - 1);
         } else {
-            Serial.printf("Invalid cell number: %d (Available: 1 to %u)\n", cellNum, getHardwareCellCount());
+            Serial.printf("Invalid cell: '%s' (Available: 1 to %u, or Row,Col up to %u,%u)\n",
+                          arg.c_str(), getHardwareCellCount(), getHardwareGridRows(), getHardwareGridCols());
         }
     } else if (upperLine.startsWith("MISSED ")) {
-        int cellNum = line.substring(7).toInt();
+        String arg = line.substring(7);
+        arg.trim();
+        int cellNum = parseCellArg(arg);
         if (cellNum >= 1 && cellNum <= (int)getHardwareCellCount()) {
-            Serial.printf("[COMMAND] Triggering MISSED_DOSE for Cell %d\n", cellNum);
+            uint8_t r = 0, c = 0;
+            getHardwareCellGridCoords(cellNum - 1, r, c);
+            Serial.printf("[COMMAND] Triggering MISSED_DOSE for Cell %d (Row %u, Col %u)\n", cellNum, r, c);
             triggerHardwareMissedDose(cellNum - 1);
         } else {
-            Serial.printf("Invalid cell number: %d (Available: 1 to %u)\n", cellNum, getHardwareCellCount());
+            Serial.printf("Invalid cell: '%s' (Available: 1 to %u, or Row,Col up to %u,%u)\n",
+                          arg.c_str(), getHardwareCellCount(), getHardwareGridRows(), getHardwareGridCols());
         }
     } else if (upperLine.startsWith("CONFIRM ")) {
-        int cellNum = line.substring(8).toInt();
+        String arg = line.substring(8);
+        arg.trim();
+        int cellNum = parseCellArg(arg);
         if (cellNum >= 1 && cellNum <= (int)getHardwareCellCount()) {
-            Serial.printf("[COMMAND] Simulating CONFIRM for Cell %d\n", cellNum);
+            uint8_t r = 0, c = 0;
+            getHardwareCellGridCoords(cellNum - 1, r, c);
+            Serial.printf("[COMMAND] Simulating CONFIRM for Cell %d (Row %u, Col %u)\n", cellNum, r, c);
             scheduleEngine.handleCellButtonPress(cellNum - 1);
             triggerHardwareDoseConfirmed(cellNum - 1);
         } else {
-            Serial.printf("Invalid cell number: %d (Available: 1 to %u)\n", cellNum, getHardwareCellCount());
+            Serial.printf("Invalid cell: '%s' (Available: 1 to %u, or Row,Col up to %u,%u)\n",
+                          arg.c_str(), getHardwareCellCount(), getHardwareGridRows(), getHardwareGridCols());
         }
     } else if (upperLine.startsWith("RESET ")) {
-        int cellNum = line.substring(6).toInt();
+        String arg = line.substring(6);
+        arg.trim();
+        int cellNum = parseCellArg(arg);
         if (cellNum >= 1 && cellNum <= (int)getHardwareCellCount()) {
-            Serial.printf("[COMMAND] Resetting Cell %d to IDLE\n", cellNum);
+            uint8_t r = 0, c = 0;
+            getHardwareCellGridCoords(cellNum - 1, r, c);
+            Serial.printf("[COMMAND] Resetting Cell %d (Row %u, Col %u) to IDLE\n", cellNum, r, c);
             triggerHardwareReset(cellNum - 1);
             scheduleEngine.dismissMissedDose(cellNum - 1);
         } else {
-            Serial.printf("Invalid cell number: %d (Available: 1 to %u)\n", cellNum, getHardwareCellCount());
+            Serial.printf("Invalid cell: '%s' (Available: 1 to %u, or Row,Col up to %u,%u)\n",
+                          arg.c_str(), getHardwareCellCount(), getHardwareGridRows(), getHardwareGridCols());
         }
     } else if (upperLine == "RESET") {
-        Serial.println("[COMMAND] Resetting all 4 cells to IDLE & dismissing missed reminders");
+        Serial.printf("[COMMAND] Resetting all %u cells to IDLE & dismissing missed reminders\n", getHardwareCellCount());
         triggerHardwareResetAll();
         scheduleEngine.dismissAllMissedDoses();
     } else if (upperLine.startsWith("LOWSTOCK ")) {
@@ -362,6 +465,6 @@ void handleSerialCommands() {
             Serial.printf("Invalid cell number: %d (Available: 1 to %u)\n", cellNum, scheduleEngine.getCellCount());
         }
     } else {
-        Serial.printf("Unknown command: '%s'. Try: STATUS, DUE, CONFIRM, MISSED, RESET, LOWSTOCK, TIME, GRACE\n", line.c_str());
+        Serial.printf("Unknown command: '%s'. Try: STATUS, GRID, CELLS, DUE, CONFIRM, MISSED, RESET, LOWSTOCK, TIME, GRACE\n", line.c_str());
     }
 }

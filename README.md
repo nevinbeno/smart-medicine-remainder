@@ -9,10 +9,11 @@
 - You will need to generate a wokwi license (free version, with a 30 days validity). This is required for the `diagram.json` file. 
 - Once you get the License, come back to VS Code, press `F1`, type `wokwi`, and click the `Wokwi: Manually enter License key`. 
 - I'd recommend to store the key in an `.env` file. 
-- Drag and drop option won't be available in the VS Code extension for free users (available only for Hobby+ and Pro users). So: 
-    - Create `diagram.json` file. 
-    - Open in the VS Code text editor. 
-    - Add the code. 
+- Drag and drop option won't be available in the VS Code extension for free users (available only for Hobby+ and Pro users).
+- **To configure the physical grid on the canvas (e.g. 1x1, 1x2, 2x2):**
+  - Edit `"grid"` in `grid_config.json` (e.g. `"2x2"`, `"1x2"`, `"1x1"`).
+  - Run `python3 scripts/set_diagram_grid.py` (or pass `python3 scripts/set_diagram_grid.py 1x2`).
+  - This automatically generates and wires `diagram.json` without manual copy-pasting.
 
 ## System Arch (at the moment)
 ```txt

@@ -3,22 +3,95 @@
 CellHardwareController::CellHardwareController(uint8_t cellCount,
                                                const CellPinConfig* pinConfigs,
                                                int8_t pinBuzzer)
-    : _cellCount(cellCount > MAX_CELLS ? MAX_CELLS : cellCount),
+    : _cellCount(cellCount > HW_MAX_CELLS ? HW_MAX_CELLS : (cellCount == 0 ? 1 : cellCount)),
+      _gridRows(2),
+      _gridCols(2),
       _buzzer(pinBuzzer, BUZZER_LEDC_CHANNEL, BUZZER_FREQ_HZ, BUZZER_PULSE_ON_MS, BUZZER_PULSE_OFF_MS),
       _doseConfirmedCallback(nullptr),
       _stateChangedCallback(nullptr) {
 
-    for (uint8_t i = 0; i < MAX_CELLS; i++) {
-        if (i < _cellCount && pinConfigs != nullptr) {
-            _cells[i] = new CellHardware(i, pinConfigs[i], CONFIRM_GREEN_DURATION_MS);
-        } else {
-            _cells[i] = nullptr;
+    // Auto-compute default grid geometry
+    if (_cellCount == 4) { _gridRows = 2; _gridCols = 2; }
+    else if (_cellCount == 9) { _gridRows = 3; _gridCols = 3; }
+    else if (_cellCount == 16) { _gridRows = 4; _gridCols = 4; }
+    else if (_cellCount == 64) { _gridRows = 8; _gridCols = 8; }
+    else { _gridRows = 1; _gridCols = _cellCount; }
+
+    for (uint8_t i = 0; i < HW_MAX_CELLS; i++) {
+        CellPinConfig cfg = { -1, -1, -1, -1, -1 };
+        if (i < HW_DIRECT_PIN_CELLS && pinConfigs != nullptr) {
+            cfg = pinConfigs[i];
         }
+        _cells[i] = new CellHardware(i, cfg, CONFIRM_GREEN_DURATION_MS);
     }
 }
 
+bool CellHardwareController::setGrid(uint8_t rows, uint8_t cols) {
+    if (rows == 0 || cols == 0) return false;
+    uint16_t total = (uint16_t)rows * (uint16_t)cols;
+    if (total == 0 || total > HW_MAX_CELLS) return false;
+
+    _gridRows = rows;
+    _gridCols = cols;
+    return setCellCount((uint8_t)total);
+}
+
+int8_t CellHardwareController::gridCoordsToIndex(uint8_t row, uint8_t col) const {
+    if (row < 1 || row > _gridRows || col < 1 || col > _gridCols) {
+        return -1;
+    }
+    uint8_t idx = (row - 1) * _gridCols + (col - 1);
+    if (idx >= _cellCount) return -1;
+    return (int8_t)idx;
+}
+
+bool CellHardwareController::indexToGridCoords(uint8_t cellIndex, uint8_t& outRow, uint8_t& outCol) const {
+    if (cellIndex >= _cellCount) return false;
+    outRow = (cellIndex / _gridCols) + 1;
+    outCol = (cellIndex % _gridCols) + 1;
+    return true;
+}
+
+bool CellHardwareController::setCellCount(uint8_t count) {
+    if (count == 0 || count > HW_MAX_CELLS) {
+        return false;
+    }
+    if (count == _cellCount) {
+        return true;
+    }
+
+    if (count < _cellCount) {
+        // Deactivating cells: reset them so LEDs are OFF and servos CLOSED
+        for (uint8_t i = count; i < _cellCount; i++) {
+            if (_cells[i] != nullptr) {
+                _cells[i]->triggerReset();
+            }
+        }
+    } else {
+        // Activating cells: initialize GPIOs and servos
+        for (uint8_t i = _cellCount; i < count; i++) {
+            if (_cells[i] != nullptr) {
+                _cells[i]->begin();
+            }
+        }
+    }
+
+    _cellCount = count;
+    // Auto-update grid dimensions if not matching
+    if ((uint16_t)_gridRows * (uint16_t)_gridCols != count) {
+        if (count == 4) { _gridRows = 2; _gridCols = 2; }
+        else if (count == 9) { _gridRows = 3; _gridCols = 3; }
+        else if (count == 16) { _gridRows = 4; _gridCols = 4; }
+        else if (count == 64) { _gridRows = 8; _gridCols = 8; }
+        else { _gridRows = 1; _gridCols = count; }
+    }
+
+    syncBuzzer();
+    return true;
+}
+
 CellHardwareController::~CellHardwareController() {
-    for (uint8_t i = 0; i < MAX_CELLS; i++) {
+    for (uint8_t i = 0; i < HW_MAX_CELLS; i++) {
         if (_cells[i] != nullptr) {
             delete _cells[i];
             _cells[i] = nullptr;
@@ -31,13 +104,20 @@ void CellHardwareController::begin() {
     _buzzer.begin();
 
     // 2. Initialize each independent cell (RGB LED, Debounced Button, Dedicated Servo)
-    for (uint8_t i = 0; i < _cellCount; i++) {
+    for (uint8_t i = 0; i < HW_MAX_CELLS; i++) {
         if (_cells[i] != nullptr) {
             _cells[i]->begin();
         }
     }
 
-    // 3. Initial sync
+    // 3. For any cells beyond _cellCount, ensure they are in IDLE state
+    for (uint8_t i = _cellCount; i < HW_MAX_CELLS; i++) {
+        if (_cells[i] != nullptr) {
+            _cells[i]->triggerReset();
+        }
+    }
+
+    // 4. Initial sync
     syncBuzzer();
 }
 
@@ -200,4 +280,34 @@ CellHardware* CellHardwareController::getCell(uint8_t cellId) {
         return _cells[cellId];
     }
     return nullptr;
+}
+
+bool CellHardwareController::triggerMedicineDueGrid(uint8_t row, uint8_t col) {
+    int8_t idx = gridCoordsToIndex(row, col);
+    if (idx < 0) return false;
+    return triggerMedicineDue((uint8_t)idx);
+}
+
+bool CellHardwareController::triggerMissedDoseGrid(uint8_t row, uint8_t col) {
+    int8_t idx = gridCoordsToIndex(row, col);
+    if (idx < 0) return false;
+    return triggerMissedDose((uint8_t)idx);
+}
+
+bool CellHardwareController::triggerDoseConfirmedGrid(uint8_t row, uint8_t col) {
+    int8_t idx = gridCoordsToIndex(row, col);
+    if (idx < 0) return false;
+    return triggerDoseConfirmed((uint8_t)idx);
+}
+
+bool CellHardwareController::triggerResetGrid(uint8_t row, uint8_t col) {
+    int8_t idx = gridCoordsToIndex(row, col);
+    if (idx < 0) return false;
+    return triggerReset((uint8_t)idx);
+}
+
+CellState CellHardwareController::getCellStateGrid(uint8_t row, uint8_t col) const {
+    int8_t idx = gridCoordsToIndex(row, col);
+    if (idx < 0) return CELL_STATE_IDLE;
+    return getCellState((uint8_t)idx);
 }

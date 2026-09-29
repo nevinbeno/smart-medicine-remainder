@@ -153,6 +153,253 @@ void test_reset_functionality(void) {
     TEST_ASSERT_EQUAL(0, controller.getActiveAlertCount());
 }
 
+void test_dynamic_cell_count_initialization(void) {
+    CellHardwareController controller(2);
+    controller.begin();
+
+    TEST_ASSERT_EQUAL(2, controller.getCellCount());
+    TEST_ASSERT_NOT_NULL(controller.getCell(0));
+    TEST_ASSERT_NOT_NULL(controller.getCell(1));
+    TEST_ASSERT_NULL(controller.getCell(2));
+    TEST_ASSERT_NULL(controller.getCell(3));
+
+    // Active cell 0 responds to trigger
+    TEST_ASSERT_TRUE(controller.triggerMedicineDue(0));
+    TEST_ASSERT_EQUAL(CELL_STATE_ALERTING, controller.getCellState(0));
+    TEST_ASSERT_TRUE(controller.getCell(0)->getServo().isOpen());
+
+    // Inactive cell 2 rejects trigger
+    TEST_ASSERT_FALSE(controller.triggerMedicineDue(2));
+    TEST_ASSERT_EQUAL(CELL_STATE_IDLE, controller.getCellState(2));
+}
+
+void test_dynamic_setCellCount_expansion(void) {
+    CellHardwareController controller(2);
+    controller.begin();
+
+    TEST_ASSERT_EQUAL(2, controller.getCellCount());
+    TEST_ASSERT_FALSE(controller.triggerMedicineDue(3));
+
+    // Dynamically expand to 4 cells
+    TEST_ASSERT_TRUE(controller.setCellCount(4));
+    TEST_ASSERT_EQUAL(4, controller.getCellCount());
+    TEST_ASSERT_NOT_NULL(controller.getCell(3));
+
+    // Cell 3 is now active and responds to trigger
+    TEST_ASSERT_TRUE(controller.triggerMedicineDue(3));
+    TEST_ASSERT_EQUAL(CELL_STATE_ALERTING, controller.getCellState(3));
+    TEST_ASSERT_TRUE(controller.getCell(3)->getServo().isOpen());
+    TEST_ASSERT_TRUE(controller.getBuzzer().isActive());
+
+    // Confirm cell 3
+    TEST_ASSERT_TRUE(controller.triggerDoseConfirmed(3));
+    TEST_ASSERT_FALSE(controller.getCell(3)->getServo().isOpen());
+    TEST_ASSERT_FALSE(controller.getBuzzer().isActive());
+}
+
+void test_dynamic_setCellCount_reduction_and_cleanup(void) {
+    CellHardwareController controller(4);
+    controller.begin();
+
+    // Trigger Cell 0 and Cell 2 DUE
+    controller.triggerMedicineDue(0);
+    controller.triggerMedicineDue(2);
+    TEST_ASSERT_EQUAL(2, controller.getActiveAlertCount());
+    TEST_ASSERT_TRUE(controller.getBuzzer().isActive());
+
+    // Reduce active cells to 2 (Cells 0 and 1 remain, 2 and 3 deactivated)
+    TEST_ASSERT_TRUE(controller.setCellCount(2));
+    TEST_ASSERT_EQUAL(2, controller.getCellCount());
+
+    // Cell 2 was deactivated and must be cleaned up / reset
+    TEST_ASSERT_EQUAL(CELL_STATE_IDLE, controller.getCellState(2));
+    TEST_ASSERT_NULL(controller.getCell(2));
+
+    // Only Cell 0 remains alerting
+    TEST_ASSERT_EQUAL(1, controller.getActiveAlertCount());
+    TEST_ASSERT_TRUE(controller.getBuzzer().isActive());
+
+    // Confirm Cell 0 -> all alerts clear, buzzer silences
+    controller.triggerDoseConfirmed(0);
+    TEST_ASSERT_EQUAL(0, controller.getActiveAlertCount());
+    TEST_ASSERT_FALSE(controller.getBuzzer().isActive());
+}
+
+void test_dynamic_cell_count_bounds_validation(void) {
+    CellHardwareController controller(3);
+    controller.begin();
+
+    TEST_ASSERT_EQUAL(3, controller.getCellCount());
+
+    // Invalid bounds should be rejected and leave count unchanged
+    TEST_ASSERT_FALSE(controller.setCellCount(0));
+    TEST_ASSERT_EQUAL(3, controller.getCellCount());
+
+    TEST_ASSERT_FALSE(controller.setCellCount(65));
+    TEST_ASSERT_EQUAL(3, controller.getCellCount());
+
+    // Same count should return true safely
+    TEST_ASSERT_TRUE(controller.setCellCount(3));
+    TEST_ASSERT_EQUAL(3, controller.getCellCount());
+}
+
+void test_matrix_grid_2x2_4x4_8x8_scaling(void) {
+    CellHardwareController controller(4);
+    controller.begin();
+
+    // Default 2x2 grid
+    TEST_ASSERT_EQUAL(2, controller.getGridRows());
+    TEST_ASSERT_EQUAL(2, controller.getGridCols());
+    TEST_ASSERT_EQUAL(4, controller.getCellCount());
+
+    // Scale to 4x4 grid (16 cells)
+    TEST_ASSERT_TRUE(controller.setGrid(4, 4));
+    TEST_ASSERT_EQUAL(4, controller.getGridRows());
+    TEST_ASSERT_EQUAL(4, controller.getGridCols());
+    TEST_ASSERT_EQUAL(16, controller.getCellCount());
+
+    // Scale to 8x8 grid (64 cells)
+    TEST_ASSERT_TRUE(controller.setGrid(8, 8));
+    TEST_ASSERT_EQUAL(8, controller.getGridRows());
+    TEST_ASSERT_EQUAL(8, controller.getGridCols());
+    TEST_ASSERT_EQUAL(64, controller.getCellCount());
+
+    // Scale to 2x4 grid (8 cells)
+    TEST_ASSERT_TRUE(controller.setGrid(2, 4));
+    TEST_ASSERT_EQUAL(2, controller.getGridRows());
+    TEST_ASSERT_EQUAL(4, controller.getGridCols());
+    TEST_ASSERT_EQUAL(8, controller.getCellCount());
+
+    // Bounds rejection: 9x8 > 64 cells, or 0 dimensions
+    TEST_ASSERT_FALSE(controller.setGrid(9, 8));
+    TEST_ASSERT_FALSE(controller.setGrid(0, 4));
+    TEST_ASSERT_FALSE(controller.setGrid(4, 0));
+    TEST_ASSERT_EQUAL(8, controller.getCellCount());
+}
+
+void test_matrix_grid_coordinate_translation_and_triggers(void) {
+    CellHardwareController controller(16);
+    controller.setGrid(4, 4);
+    controller.begin();
+
+    // Coordinate mapping tests (1-indexed row, col -> 0-indexed linear)
+    TEST_ASSERT_EQUAL(0, controller.gridCoordsToIndex(1, 1));
+    TEST_ASSERT_EQUAL(6, controller.gridCoordsToIndex(2, 3)); // (2-1)*4 + (3-1) = 6
+    TEST_ASSERT_EQUAL(15, controller.gridCoordsToIndex(4, 4));
+    TEST_ASSERT_EQUAL(-1, controller.gridCoordsToIndex(5, 1)); // out of bounds
+    TEST_ASSERT_EQUAL(-1, controller.gridCoordsToIndex(1, 5));
+
+    uint8_t r = 0, c = 0;
+    TEST_ASSERT_TRUE(controller.indexToGridCoords(6, r, c));
+    TEST_ASSERT_EQUAL(2, r);
+    TEST_ASSERT_EQUAL(3, c);
+
+    // Matrix grid trigger tests
+    TEST_ASSERT_TRUE(controller.triggerMedicineDueGrid(2, 3));
+    TEST_ASSERT_EQUAL(CELL_STATE_ALERTING, controller.getCellStateGrid(2, 3));
+    TEST_ASSERT_EQUAL(CELL_STATE_ALERTING, controller.getCellState(6));
+    TEST_ASSERT_TRUE(controller.getCell(6)->getServo().isOpen());
+
+    // Other cells must remain closed
+    TEST_ASSERT_EQUAL(CELL_STATE_IDLE, controller.getCellStateGrid(1, 1));
+    TEST_ASSERT_FALSE(controller.getCell(0)->getServo().isOpen());
+
+    // Confirm via matrix grid
+    TEST_ASSERT_TRUE(controller.triggerDoseConfirmedGrid(2, 3));
+    TEST_ASSERT_EQUAL(CELL_STATE_CONFIRMED, controller.getCellStateGrid(2, 3));
+    TEST_ASSERT_FALSE(controller.getCell(6)->getServo().isOpen());
+
+    // Out of bounds trigger returns false
+    TEST_ASSERT_FALSE(controller.triggerMedicineDueGrid(5, 5));
+}
+
+void test_matrix_grid_8x8_buzzer_arbitration(void) {
+    CellHardwareController controller;
+    controller.setGrid(8, 8); // 64 cells!
+    controller.begin();
+
+    TEST_ASSERT_EQUAL(64, controller.getCellCount());
+
+    // Trigger opposite corners of 8x8 matrix: (1,1) -> Cell 0, (8,8) -> Cell 63
+    TEST_ASSERT_TRUE(controller.triggerMedicineDueGrid(1, 1));
+    TEST_ASSERT_TRUE(controller.triggerMedicineDueGrid(8, 8));
+
+    TEST_ASSERT_EQUAL(2, controller.getActiveAlertCount());
+    TEST_ASSERT_TRUE(controller.getBuzzer().isActive());
+
+    // Confirm (1,1): alert count drops to 1, buzzer must remain active!
+    TEST_ASSERT_TRUE(controller.triggerDoseConfirmedGrid(1, 1));
+    TEST_ASSERT_EQUAL(1, controller.getActiveAlertCount());
+    TEST_ASSERT_TRUE(controller.getBuzzer().isActive());
+
+    // Confirm (8,8): alert count drops to 0, buzzer silences immediately!
+    TEST_ASSERT_TRUE(controller.triggerDoseConfirmedGrid(8, 8));
+    TEST_ASSERT_EQUAL(0, controller.getActiveAlertCount());
+    TEST_ASSERT_FALSE(controller.getBuzzer().isActive());
+}
+
+void test_4x4_single_compartment_complete_isolation(void) {
+    CellHardwareController controller(16);
+    controller.setGrid(4, 4);
+    controller.begin();
+
+    TEST_ASSERT_EQUAL(16, controller.getCellCount());
+
+    // 1. Verify that triggering ANY single cell in a 4x4 grid leaves all other 15 cells strictly IDLE
+    for (uint8_t target = 0; target < 16; target++) {
+        // Trigger target cell
+        TEST_ASSERT_TRUE(controller.triggerMedicineDue(target));
+        TEST_ASSERT_EQUAL(CELL_STATE_ALERTING, controller.getCellState(target));
+        TEST_ASSERT_TRUE(controller.getCell(target)->getServo().isOpen());
+
+        // Verify all other 15 cells are strictly IDLE and closed
+        for (uint8_t other = 0; target < 16 && other < 16; other++) {
+            if (other != target) {
+                TEST_ASSERT_EQUAL(CELL_STATE_IDLE, controller.getCellState(other));
+                TEST_ASSERT_FALSE(controller.getCell(other)->getServo().isOpen());
+            }
+        }
+
+        // Confirm target cell: closes its servo, other 15 cells remain untouched
+        TEST_ASSERT_TRUE(controller.triggerDoseConfirmed(target));
+        TEST_ASSERT_EQUAL(CELL_STATE_CONFIRMED, controller.getCellState(target));
+        TEST_ASSERT_FALSE(controller.getCell(target)->getServo().isOpen());
+
+        for (uint8_t other = 0; other < 16; other++) {
+            if (other != target) {
+                TEST_ASSERT_EQUAL(CELL_STATE_IDLE, controller.getCellState(other));
+            }
+        }
+
+        // Reset target back to IDLE before testing next cell
+        TEST_ASSERT_TRUE(controller.triggerReset(target));
+        TEST_ASSERT_EQUAL(CELL_STATE_IDLE, controller.getCellState(target));
+    }
+
+    // 2. Simultaneous independent alerts across distinct matrix coordinates (Row 2, Col 2) and (Row 4, Col 3)
+    // Row 2, Col 2 -> index 5; Row 4, Col 3 -> index 14
+    TEST_ASSERT_TRUE(controller.triggerMedicineDueGrid(2, 2));
+    TEST_ASSERT_TRUE(controller.triggerMedicineDueGrid(4, 3));
+
+    TEST_ASSERT_EQUAL(CELL_STATE_ALERTING, controller.getCellStateGrid(2, 2));
+    TEST_ASSERT_EQUAL(CELL_STATE_ALERTING, controller.getCellStateGrid(4, 3));
+    TEST_ASSERT_TRUE(controller.getCell(5)->getServo().isOpen());
+    TEST_ASSERT_TRUE(controller.getCell(14)->getServo().isOpen());
+
+    // Confirm ONLY Row 2, Col 2 -> Row 4, Col 3 MUST remain open and alerting
+    TEST_ASSERT_TRUE(controller.triggerDoseConfirmedGrid(2, 2));
+    TEST_ASSERT_EQUAL(CELL_STATE_CONFIRMED, controller.getCellStateGrid(2, 2));
+    TEST_ASSERT_FALSE(controller.getCell(5)->getServo().isOpen());
+
+    TEST_ASSERT_EQUAL(CELL_STATE_ALERTING, controller.getCellStateGrid(4, 3));
+    TEST_ASSERT_TRUE(controller.getCell(14)->getServo().isOpen());
+
+    // Finally confirm Row 4, Col 3
+    TEST_ASSERT_TRUE(controller.triggerDoseConfirmedGrid(4, 3));
+    TEST_ASSERT_EQUAL(CELL_STATE_CONFIRMED, controller.getCellStateGrid(4, 3));
+    TEST_ASSERT_FALSE(controller.getCell(14)->getServo().isOpen());
+}
+
 void setup() {
     delay(2000);
     UNITY_BEGIN();
@@ -162,6 +409,14 @@ void setup() {
     RUN_TEST(test_common_buzzer_arbitration_across_all_4_cells);
     RUN_TEST(test_missed_dose_warning_per_cell);
     RUN_TEST(test_reset_functionality);
+    RUN_TEST(test_dynamic_cell_count_initialization);
+    RUN_TEST(test_dynamic_setCellCount_expansion);
+    RUN_TEST(test_dynamic_setCellCount_reduction_and_cleanup);
+    RUN_TEST(test_dynamic_cell_count_bounds_validation);
+    RUN_TEST(test_matrix_grid_2x2_4x4_8x8_scaling);
+    RUN_TEST(test_matrix_grid_coordinate_translation_and_triggers);
+    RUN_TEST(test_matrix_grid_8x8_buzzer_arbitration);
+    RUN_TEST(test_4x4_single_compartment_complete_isolation);
     UNITY_END();
 }
 

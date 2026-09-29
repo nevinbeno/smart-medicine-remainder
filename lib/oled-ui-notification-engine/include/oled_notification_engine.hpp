@@ -40,6 +40,9 @@ public:
     /** Force the next update to redraw immediately. */
     void requestRedraw();
 
+    /** Set the grid label to show on the clock screen header (e.g., "[2x2]", "[8x8]"). */
+    void setGridLabel(const char* label);
+
     bool isAttached() const { return attached; }
 
 private:
@@ -55,6 +58,8 @@ private:
     uint8_t lastNotificationCount;
     bool redrawRequested;
     bool attached;
+
+    char gridLabel[12];
 
     // Last event is copied because scheduler callback arguments are temporary.
     DoseEvent lastEvent;

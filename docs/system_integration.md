@@ -6,7 +6,7 @@ This document describes the complete integration between:
 1. **Role 1 (Medicine & Cell Data)**: Dynamic JSON configuration loader (`configuration.json`).
 2. **Role 2 (Scheduling & Time/Event Engine)**: Real-time RTC-driven scheduling, simultaneous due dose detection, and grace-period missed dose evaluation.
 3. **Role 3 (OLED UI & Notification Engine)**: Non-blocking visual renderer for clock, active due alerts, missed banners, and dose confirmations.
-4. **Role 4 (4-Cell Hardware & Alert Control)**: Independent RGB LEDs, dedicated servos, debounced buttons, and arbitrated common alert buzzer.
+4. **Role 4 (Cell Hardware & Alert Control - Pavithra)**: Independent RGB LEDs, dedicated servos, debounced buttons, dynamic cell count scaling (1 to 4 cells), and arbitrated common alert buzzer.
 
 ---
 
@@ -121,23 +121,53 @@ You can type these commands in the Serial Monitor (115200 baud) at any time:
 
 | Command | Description | What to Expect |
 | :--- | :--- | :--- |
-| `STATUS` | Full diagnostic state dump | Shows state of all 4 cells, servo angles, buzzer status, active due events, and active missed events. |
+| `STATUS` | Full visual matrix state dump | Shows 2D visual matrix of all active cells, servo angles, buzzer status, active due events, and active missed events. |
+| `GRID <RxC>` | Scales matrix dimensions | E.g., `GRID 2x2` (4 cells), `GRID 4x4` (16 cells), `GRID 8x8` (64 cells). Resets deactivated cells and recalculates alerts. |
+| `CELLS <1-64>` | Scales total active cells | Configures hardware to manage X cells at runtime (e.g. `CELLS 16`). Auto-computes matching grid layout. |
 | `TIME <HH> <MM> [SS]` | Adjusts RTC time | E.g. `TIME 07 59 55` puts the clock 5 s before Pantocid (07:00). After 5 s, Servo 4 opens, LED 4 turns RED, Buzzer pulses, OLED shows Pantocid alert. |
 | `TIME 21 59 55` | Test simultaneous doses | Reaches 22:00:00. Servos 2 & 3 open simultaneously. OLED rotates between Cetirizine and Amoxicillin. |
-| `CONFIRM <1-4>` | Simulates button press on a DUE cell | Confirms dose; servo closes, LED turns green, OLED shows `DOSE CONFIRMED`. Also **decrements engine stock** — trigger `LOWSTOCK` after enough confirms. |
-| `DUE <1-4>` | Manually triggers DUE state | Directly activates medicine-due state for Cell X. |
-| `MISSED <1-4>` | Manually triggers MISSED state | Puts Cell X into yellow warning state. |
-| `RESET <1-4>` | Resets single cell | Resets Cell X to IDLE and dismisses its missed reminder (OLED shows `REMINDER CLEARED` for 3 s). |
-| `RESET` | Global reset | Resets all cells and clears all pending reminders. |
+| `CONFIRM <id \| r,c>` | Simulates button press on a cell | Confirms dose for linear cell ID (e.g. `CONFIRM 1`) or matrix coordinate (e.g. `CONFIRM 2,1`); servo closes, LED turns green, stock decrements. |
+| `DUE <id \| r,c>` | Manually triggers DUE state | Directly activates medicine-due state for Cell ID or `row,col`. |
+| `MISSED <id \| r,c>` | Manually triggers MISSED state | Puts Cell ID or `row,col` into yellow warning state. |
+| `RESET <id \| r,c>` | Resets single cell | Resets Cell ID or `row,col` to IDLE and dismisses its missed reminder. |
+| `RESET` | Global reset | Resets all active cells and clears all pending reminders. |
 | `LOWSTOCK <1-4>` | **Simulates low stock for Cell X** | Forces `currentStock` to 1 for Cell X. On the next engine tick, a `LOW_STOCK_WARNING` event fires. OLED shows `LOW STOCK WARNING` with medicine name and remaining count for 3 s. |
 | `GRACE <minutes>` | Sets grace period | Adjusts grace period before due alerts transition to missed (e.g. `GRACE 1`). |
 
 ---
 
-## 7. Modified and Added Files
+## 7. Wokwi Canvas Configuration via `grid_config.json`
 
+To customize the physical component layout on the Wokwi canvas (`diagram.json`), edit the configuration variable in [grid_config.json](file:///Users/gabriel/Projects/smart-medicine-remainder/grid_config.json):
+
+```json
+{
+  "grid": "2x2",
+  "rows": 2,
+  "cols": 2,
+  "total_compartments": 4
+}
+```
+
+Then regenerate `diagram.json`:
+```bash
+python3 scripts/set_diagram_grid.py [1x1 | 1x2 | 2x1 | 2x2]
+# Or apply grid_config.json settings:
+python3 scripts/set_diagram_grid.py
+```
+
+*Note: The ESP32 DevKit V1 has 19 usable GPIOs, which supports up to a 2x2 (4 cells) direct physical testbench. Grids larger than 4 cells (e.g. 4x4, 8x8) are handled seamlessly by the firmware's Hardware Abstraction Layer (HAL).*
+
+---
+
+## 8. Modified and Added Files
+
+- **`grid_config.json`**: Configuration variable file defining active grid dimensions for Wokwi.
+- **`scripts/set_diagram_grid.py`**: Automated generator for `diagram.json` mapping servos, LEDs, and buttons to ESP32 GPIOs.
+- **`lib/CellHardwareControl/`**: Role 4 core library supporting scalable matrix grids (up to 8x8), dual addressing, and multi-cell buzzer arbitration.
+- **`lib/oled-ui-notification-engine/`**: Added lightweight `setGridLabel` header indicator for active matrix layout.
 - **`platformio.ini`**: Added include build flags (`-Ischeduling-event-engine/include`, `-Imedicine-cell-data/include`, `-Ilib/oled-ui-notification-engine/include`).
-- **`src/HardwareBridge.h`**: Clean interface isolating Role 4 hardware functions to prevent type collisions between `CellState` enums.
-- **`src/HardwareBridge.cpp`**: Hardware bridge implementation managing callbacks and `CellHardwareController`.
+- **`src/HardwareBridge.h` / `src/HardwareBridge.cpp`**: Clean interface isolating Role 4 hardware functions to prevent type collisions between `CellState` enums.
 - **`src/main.cpp`**: Master coordinator binding RTC time provider, scheduler, dynamic configuration loader, OLED engine, and hardware bridge.
-- **`docs/system_integration.md`**: Complete system documentation.
+- **`docs/cell_hardware_control.md`**: Complete Role 4 hardware control and grid configuration documentation.
+- **`docs/system_integration.md`**: Complete system integration documentation.

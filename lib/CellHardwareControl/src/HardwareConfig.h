@@ -12,12 +12,26 @@
  */
 
 // ============================================================================
-// SYSTEM CAPACITY & SCALABILITY CONFIGURATION
+// SYSTEM CAPACITY & SCALABILITY CONFIGURATION (MATRIX GRIDS 2x2, 4x4, 8x8)
 // ============================================================================
 
-// System configured for exactly 4 independent cells
-#define MAX_CELLS 4
-#define ACTIVE_CELL_COUNT 4
+// Maximum system capacity for scalable matrix grids (up to 8x8 = 64 compartments)
+#define HW_MAX_GRID_ROWS      8
+#define HW_MAX_GRID_COLS      8
+#define HW_MAX_CELLS          (HW_MAX_GRID_ROWS * HW_MAX_GRID_COLS) // 64 cells
+
+#define HW_DIRECT_PIN_CELLS   4   // Direct GPIO wired cells on ESP32 DevKit (Cell 1 to 4)
+#define DEFAULT_GRID_ROWS     2   // Default 2x2 grid layout
+#define DEFAULT_GRID_COLS     2
+#define DEFAULT_CELL_COUNT    (DEFAULT_GRID_ROWS * DEFAULT_GRID_COLS) // 4 cells
+
+#ifndef MAX_CELLS
+#define MAX_CELLS HW_MAX_CELLS
+#endif
+
+#ifndef ACTIVE_CELL_COUNT
+#define ACTIVE_CELL_COUNT DEFAULT_CELL_COUNT
+#endif
 
 // ============================================================================
 // PIN DEFINITIONS - I2C (RESERVED BY EXISTING MODULES - DO NOT ALTER)
@@ -93,12 +107,14 @@ struct CellPinConfig {
     int8_t pinServo;
 };
 
-// Default pin configurations for all 4 cells
-static const CellPinConfig DEFAULT_CELL_PIN_CONFIGS[MAX_CELLS] = {
+// Default pin configurations for the direct physical cells
+static const CellPinConfig DEFAULT_DIRECT_CELL_PIN_CONFIGS[HW_DIRECT_PIN_CELLS] = {
     { PIN_CELL1_RED, PIN_CELL1_GREEN, PIN_CELL1_BLUE, PIN_CELL1_BUTTON, PIN_CELL1_SERVO },
     { PIN_CELL2_RED, PIN_CELL2_GREEN, PIN_CELL2_BLUE, PIN_CELL2_BUTTON, PIN_CELL2_SERVO },
     { PIN_CELL3_RED, PIN_CELL3_GREEN, PIN_CELL3_BLUE, PIN_CELL3_BUTTON, PIN_CELL3_SERVO },
     { PIN_CELL4_RED, PIN_CELL4_GREEN, PIN_CELL4_BLUE, PIN_CELL4_BUTTON, PIN_CELL4_SERVO }
 };
+
+#define DEFAULT_CELL_PIN_CONFIGS DEFAULT_DIRECT_CELL_PIN_CONFIGS
 
 #endif // HARDWARE_CONFIG_H

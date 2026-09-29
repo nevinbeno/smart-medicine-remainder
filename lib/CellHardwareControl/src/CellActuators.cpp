@@ -153,12 +153,12 @@ void ServoController::begin() {
 }
 
 void ServoController::writeAngle(uint8_t angle) {
+    if (angle > 180) angle = 180;
+    _currentAngle = angle;
     if (!_isAttached && _pin >= 0) {
         begin();
     }
     if (_isAttached) {
-        if (angle > 180) angle = 180;
-        _currentAngle = angle;
         _servo.write(angle);
     }
 }
@@ -199,7 +199,7 @@ BuzzerController::BuzzerController(int8_t pin, uint8_t channel, uint32_t frequen
 void BuzzerController::begin() {
     if (_pin >= 0 && !_initialized) {
         pinMode(_pin, OUTPUT);
-        noTone(_pin);
+        digitalWrite(_pin, LOW);
         _isToneActive = false;
         _initialized = true;
     }
