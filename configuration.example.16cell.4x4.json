@@ -1,0 +1,329 @@
+{
+  "_instructions": {
+    "title": "Smart Medicine Reminder - Configuration Guide",
+    "description": "This configuration file defines active medicine compartments, prescription schedules, and inventory stock.",
+    "how_to_change_grid": "Set 'grid' to 'auto' to automatically size the grid based on 'cellCount', or specify an exact matrix dimension like '1x1', '1x2', '2x2', '4x4', '8x8'.",
+    "how_to_change_grid_or_cell_count": "Change 'cellCount' to match the number of active compartments you want loaded at boot (e.g., 1 for 1x1, 2 for 1x2, 4 for 2x2, 9 for 3x3, 16 for 4x4).",
+    "how_to_add_a_medicine": "Copy the '_template_new_occupied_cell' below and paste it into the 'cells' array, then update 'cellCount'.",
+    "how_to_add_more_schedules": "Add another '{ hour: HH, minute: MM, doseQuantity: Q }' object to the 'schedules' array of that medicine (up to 8 schedules per medicine).",
+    "valid_cell_states": [
+      "OCCUPIED",
+      "EMPTY",
+      "DISABLED_STATE"
+    ]
+  },
+  "_template_new_occupied_cell": {
+    "cellId": "CELL05",
+    "state": "OCCUPIED",
+    "currentStock": 30,
+    "medicine": {
+      "medicineId": "MED005",
+      "name": "Metformin",
+      "lowStockThreshold": 5,
+      "schedules": [
+        {
+          "hour": 8,
+          "minute": 30,
+          "doseQuantity": 1
+        },
+        {
+          "hour": 20,
+          "minute": 30,
+          "doseQuantity": 1
+        }
+      ]
+    }
+  },
+  "_template_empty_standby_cell": {
+    "cellId": "CELL06",
+    "state": "EMPTY",
+    "currentStock": 0,
+    "medicine": null
+  },
+  "grid": "4x4",
+  "cellCount": 16,
+  "cells": [
+    {
+      "cellId": "CELL01",
+      "state": "OCCUPIED",
+      "currentStock": 20,
+      "medicine": {
+        "medicineId": "MED001",
+        "name": "Paracetamol",
+        "lowStockThreshold": 3,
+        "schedules": [
+          {
+            "hour": 20,
+            "minute": 37,
+            "doseQuantity": 1
+          },
+          {
+            "hour": 20,
+            "minute": 0,
+            "doseQuantity": 1
+          }
+        ]
+      }
+    },
+    {
+      "cellId": "CELL02",
+      "state": "OCCUPIED",
+      "currentStock": 10,
+      "medicine": {
+        "medicineId": "MED002",
+        "name": "Cetirizine",
+        "lowStockThreshold": 2,
+        "schedules": [
+          {
+            "hour": 22,
+            "minute": 0,
+            "doseQuantity": 1
+          }
+        ]
+      }
+    },
+    {
+      "cellId": "CELL03",
+      "state": "OCCUPIED",
+      "currentStock": 15,
+      "medicine": {
+        "medicineId": "MED003",
+        "name": "Amoxicillin",
+        "lowStockThreshold": 3,
+        "schedules": [
+          {
+            "hour": 13,
+            "minute": 0,
+            "doseQuantity": 1
+          },
+          {
+            "hour": 22,
+            "minute": 0,
+            "doseQuantity": 1
+          }
+        ]
+      }
+    },
+    {
+      "cellId": "CELL04",
+      "state": "OCCUPIED",
+      "currentStock": 4,
+      "medicine": {
+        "medicineId": "MED004",
+        "name": "Pantocid",
+        "lowStockThreshold": 3,
+        "schedules": [
+          {
+            "hour": 20,
+            "minute": 43,
+            "doseQuantity": 1
+          }
+        ]
+      }
+    },
+    {
+      "cellId": "CELL05",
+      "state": "OCCUPIED",
+      "currentStock": 30,
+      "medicine": {
+        "medicineId": "MED005",
+        "name": "Medicine 05",
+        "lowStockThreshold": 5,
+        "schedules": [
+          {
+            "hour": 21,
+            "minute": 30,
+            "doseQuantity": 1
+          }
+        ]
+      }
+    },
+    {
+      "cellId": "CELL06",
+      "state": "OCCUPIED",
+      "currentStock": 30,
+      "medicine": {
+        "medicineId": "MED006",
+        "name": "Medicine 06",
+        "lowStockThreshold": 5,
+        "schedules": [
+          {
+            "hour": 21,
+            "minute": 31,
+            "doseQuantity": 1
+          }
+        ]
+      }
+    },
+    {
+      "cellId": "CELL07",
+      "state": "OCCUPIED",
+      "currentStock": 30,
+      "medicine": {
+        "medicineId": "MED007",
+        "name": "Medicine 07",
+        "lowStockThreshold": 5,
+        "schedules": [
+          {
+            "hour": 21,
+            "minute": 32,
+            "doseQuantity": 1
+          }
+        ]
+      }
+    },
+    {
+      "cellId": "CELL08",
+      "state": "OCCUPIED",
+      "currentStock": 30,
+      "medicine": {
+        "medicineId": "MED008",
+        "name": "Medicine 08",
+        "lowStockThreshold": 5,
+        "schedules": [
+          {
+            "hour": 21,
+            "minute": 33,
+            "doseQuantity": 1
+          }
+        ]
+      }
+    },
+    {
+      "cellId": "CELL09",
+      "state": "OCCUPIED",
+      "currentStock": 30,
+      "medicine": {
+        "medicineId": "MED009",
+        "name": "Medicine 09",
+        "lowStockThreshold": 5,
+        "schedules": [
+          {
+            "hour": 21,
+            "minute": 34,
+            "doseQuantity": 1
+          }
+        ]
+      }
+    },
+    {
+      "cellId": "CELL10",
+      "state": "OCCUPIED",
+      "currentStock": 30,
+      "medicine": {
+        "medicineId": "MED010",
+        "name": "Medicine 10",
+        "lowStockThreshold": 5,
+        "schedules": [
+          {
+            "hour": 21,
+            "minute": 35,
+            "doseQuantity": 1
+          }
+        ]
+      }
+    },
+    {
+      "cellId": "CELL11",
+      "state": "OCCUPIED",
+      "currentStock": 30,
+      "medicine": {
+        "medicineId": "MED011",
+        "name": "Medicine 11",
+        "lowStockThreshold": 5,
+        "schedules": [
+          {
+            "hour": 21,
+            "minute": 36,
+            "doseQuantity": 1
+          }
+        ]
+      }
+    },
+    {
+      "cellId": "CELL12",
+      "state": "OCCUPIED",
+      "currentStock": 30,
+      "medicine": {
+        "medicineId": "MED012",
+        "name": "Medicine 12",
+        "lowStockThreshold": 5,
+        "schedules": [
+          {
+            "hour": 21,
+            "minute": 37,
+            "doseQuantity": 1
+          }
+        ]
+      }
+    },
+    {
+      "cellId": "CELL13",
+      "state": "OCCUPIED",
+      "currentStock": 30,
+      "medicine": {
+        "medicineId": "MED013",
+        "name": "Medicine 13",
+        "lowStockThreshold": 5,
+        "schedules": [
+          {
+            "hour": 21,
+            "minute": 38,
+            "doseQuantity": 1
+          }
+        ]
+      }
+    },
+    {
+      "cellId": "CELL14",
+      "state": "OCCUPIED",
+      "currentStock": 30,
+      "medicine": {
+        "medicineId": "MED014",
+        "name": "Medicine 14",
+        "lowStockThreshold": 5,
+        "schedules": [
+          {
+            "hour": 21,
+            "minute": 39,
+            "doseQuantity": 1
+          }
+        ]
+      }
+    },
+    {
+      "cellId": "CELL15",
+      "state": "OCCUPIED",
+      "currentStock": 30,
+      "medicine": {
+        "medicineId": "MED015",
+        "name": "Medicine 15",
+        "lowStockThreshold": 5,
+        "schedules": [
+          {
+            "hour": 21,
+            "minute": 40,
+            "doseQuantity": 1
+          }
+        ]
+      }
+    },
+    {
+      "cellId": "CELL16",
+      "state": "OCCUPIED",
+      "currentStock": 30,
+      "medicine": {
+        "medicineId": "MED016",
+        "name": "Medicine 16",
+        "lowStockThreshold": 5,
+        "schedules": [
+          {
+            "hour": 21,
+            "minute": 41,
+            "doseQuantity": 1
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -38,7 +38,7 @@
     {
       "type": "wokwi-rgb-led",
       "id": "rgb1",
-      "top": -470,
+      "top": -240,
       "left": 140,
       "attrs": {
         "common": "cathode"
@@ -47,7 +47,7 @@
     {
       "type": "wokwi-pushbutton",
       "id": "btn1",
-      "top": -470,
+      "top": -240,
       "left": 220,
       "attrs": {
         "color": "green",
@@ -57,14 +57,14 @@
     {
       "type": "wokwi-servo",
       "id": "servo1",
-      "top": -470,
+      "top": -240,
       "left": 310,
       "attrs": {}
     },
     {
       "type": "wokwi-rgb-led",
       "id": "rgb2",
-      "top": -470,
+      "top": -240,
       "left": 440,
       "attrs": {
         "common": "cathode"
@@ -73,7 +73,7 @@
     {
       "type": "wokwi-pushbutton",
       "id": "btn2",
-      "top": -470,
+      "top": -240,
       "left": 520,
       "attrs": {
         "color": "green",
@@ -83,15 +83,15 @@
     {
       "type": "wokwi-servo",
       "id": "servo2",
-      "top": -470,
+      "top": -240,
       "left": 610,
       "attrs": {}
     },
     {
       "type": "wokwi-rgb-led",
       "id": "rgb3",
-      "top": -470,
-      "left": 740,
+      "top": -125,
+      "left": 140,
       "attrs": {
         "common": "cathode"
       }
@@ -99,8 +99,8 @@
     {
       "type": "wokwi-pushbutton",
       "id": "btn3",
-      "top": -470,
-      "left": 820,
+      "top": -125,
+      "left": 220,
       "attrs": {
         "color": "green",
         "label": "Btn 3"
@@ -109,15 +109,15 @@
     {
       "type": "wokwi-servo",
       "id": "servo3",
-      "top": -470,
-      "left": 910,
+      "top": -125,
+      "left": 310,
       "attrs": {}
     },
     {
       "type": "wokwi-rgb-led",
       "id": "rgb4",
-      "top": -470,
-      "left": 1040,
+      "top": -125,
+      "left": 440,
       "attrs": {
         "common": "cathode"
       }
@@ -125,8 +125,8 @@
     {
       "type": "wokwi-pushbutton",
       "id": "btn4",
-      "top": -470,
-      "left": 1120,
+      "top": -125,
+      "left": 520,
       "attrs": {
         "color": "green",
         "label": "Btn 4"
@@ -135,330 +135,9 @@
     {
       "type": "wokwi-servo",
       "id": "servo4",
-      "top": -470,
-      "left": 1210,
-      "attrs": {}
-    },
-    {
-      "type": "wokwi-rgb-led",
-      "id": "rgb5",
-      "top": -355,
-      "left": 140,
-      "attrs": {
-        "common": "cathode"
-      }
-    },
-    {
-      "type": "wokwi-pushbutton",
-      "id": "btn5",
-      "top": -355,
-      "left": 220,
-      "attrs": {
-        "color": "orange",
-        "label": "Btn 5 (V)"
-      }
-    },
-    {
-      "type": "wokwi-servo",
-      "id": "servo5",
-      "top": -355,
-      "left": 310,
-      "attrs": {}
-    },
-    {
-      "type": "wokwi-rgb-led",
-      "id": "rgb6",
-      "top": -355,
-      "left": 440,
-      "attrs": {
-        "common": "cathode"
-      }
-    },
-    {
-      "type": "wokwi-pushbutton",
-      "id": "btn6",
-      "top": -355,
-      "left": 520,
-      "attrs": {
-        "color": "orange",
-        "label": "Btn 6 (V)"
-      }
-    },
-    {
-      "type": "wokwi-servo",
-      "id": "servo6",
-      "top": -355,
-      "left": 610,
-      "attrs": {}
-    },
-    {
-      "type": "wokwi-rgb-led",
-      "id": "rgb7",
-      "top": -355,
-      "left": 740,
-      "attrs": {
-        "common": "cathode"
-      }
-    },
-    {
-      "type": "wokwi-pushbutton",
-      "id": "btn7",
-      "top": -355,
-      "left": 820,
-      "attrs": {
-        "color": "orange",
-        "label": "Btn 7 (V)"
-      }
-    },
-    {
-      "type": "wokwi-servo",
-      "id": "servo7",
-      "top": -355,
-      "left": 910,
-      "attrs": {}
-    },
-    {
-      "type": "wokwi-rgb-led",
-      "id": "rgb8",
-      "top": -355,
-      "left": 1040,
-      "attrs": {
-        "common": "cathode"
-      }
-    },
-    {
-      "type": "wokwi-pushbutton",
-      "id": "btn8",
-      "top": -355,
-      "left": 1120,
-      "attrs": {
-        "color": "orange",
-        "label": "Btn 8 (V)"
-      }
-    },
-    {
-      "type": "wokwi-servo",
-      "id": "servo8",
-      "top": -355,
-      "left": 1210,
-      "attrs": {}
-    },
-    {
-      "type": "wokwi-rgb-led",
-      "id": "rgb9",
-      "top": -240,
-      "left": 140,
-      "attrs": {
-        "common": "cathode"
-      }
-    },
-    {
-      "type": "wokwi-pushbutton",
-      "id": "btn9",
-      "top": -240,
-      "left": 220,
-      "attrs": {
-        "color": "orange",
-        "label": "Btn 9 (V)"
-      }
-    },
-    {
-      "type": "wokwi-servo",
-      "id": "servo9",
-      "top": -240,
-      "left": 310,
-      "attrs": {}
-    },
-    {
-      "type": "wokwi-rgb-led",
-      "id": "rgb10",
-      "top": -240,
-      "left": 440,
-      "attrs": {
-        "common": "cathode"
-      }
-    },
-    {
-      "type": "wokwi-pushbutton",
-      "id": "btn10",
-      "top": -240,
-      "left": 520,
-      "attrs": {
-        "color": "orange",
-        "label": "Btn 10 (V)"
-      }
-    },
-    {
-      "type": "wokwi-servo",
-      "id": "servo10",
-      "top": -240,
-      "left": 610,
-      "attrs": {}
-    },
-    {
-      "type": "wokwi-rgb-led",
-      "id": "rgb11",
-      "top": -240,
-      "left": 740,
-      "attrs": {
-        "common": "cathode"
-      }
-    },
-    {
-      "type": "wokwi-pushbutton",
-      "id": "btn11",
-      "top": -240,
-      "left": 820,
-      "attrs": {
-        "color": "orange",
-        "label": "Btn 11 (V)"
-      }
-    },
-    {
-      "type": "wokwi-servo",
-      "id": "servo11",
-      "top": -240,
-      "left": 910,
-      "attrs": {}
-    },
-    {
-      "type": "wokwi-rgb-led",
-      "id": "rgb12",
-      "top": -240,
-      "left": 1040,
-      "attrs": {
-        "common": "cathode"
-      }
-    },
-    {
-      "type": "wokwi-pushbutton",
-      "id": "btn12",
-      "top": -240,
-      "left": 1120,
-      "attrs": {
-        "color": "orange",
-        "label": "Btn 12 (V)"
-      }
-    },
-    {
-      "type": "wokwi-servo",
-      "id": "servo12",
-      "top": -240,
-      "left": 1210,
-      "attrs": {}
-    },
-    {
-      "type": "wokwi-rgb-led",
-      "id": "rgb13",
-      "top": -125,
-      "left": 140,
-      "attrs": {
-        "common": "cathode"
-      }
-    },
-    {
-      "type": "wokwi-pushbutton",
-      "id": "btn13",
-      "top": -125,
-      "left": 220,
-      "attrs": {
-        "color": "orange",
-        "label": "Btn 13 (V)"
-      }
-    },
-    {
-      "type": "wokwi-servo",
-      "id": "servo13",
-      "top": -125,
-      "left": 310,
-      "attrs": {}
-    },
-    {
-      "type": "wokwi-rgb-led",
-      "id": "rgb14",
-      "top": -125,
-      "left": 440,
-      "attrs": {
-        "common": "cathode"
-      }
-    },
-    {
-      "type": "wokwi-pushbutton",
-      "id": "btn14",
-      "top": -125,
-      "left": 520,
-      "attrs": {
-        "color": "orange",
-        "label": "Btn 14 (V)"
-      }
-    },
-    {
-      "type": "wokwi-servo",
-      "id": "servo14",
       "top": -125,
       "left": 610,
       "attrs": {}
-    },
-    {
-      "type": "wokwi-rgb-led",
-      "id": "rgb15",
-      "top": -125,
-      "left": 740,
-      "attrs": {
-        "common": "cathode"
-      }
-    },
-    {
-      "type": "wokwi-pushbutton",
-      "id": "btn15",
-      "top": -125,
-      "left": 820,
-      "attrs": {
-        "color": "orange",
-        "label": "Btn 15 (V)"
-      }
-    },
-    {
-      "type": "wokwi-servo",
-      "id": "servo15",
-      "top": -125,
-      "left": 910,
-      "attrs": {}
-    },
-    {
-      "type": "wokwi-rgb-led",
-      "id": "rgb16",
-      "top": -125,
-      "left": 1040,
-      "attrs": {
-        "common": "cathode"
-      }
-    },
-    {
-      "type": "wokwi-pushbutton",
-      "id": "btn16",
-      "top": -125,
-      "left": 1120,
-      "attrs": {
-        "color": "orange",
-        "label": "Btn 16 (V)"
-      }
-    },
-    {
-      "type": "wokwi-servo",
-      "id": "servo16",
-      "top": -125,
-      "left": 1210,
-      "attrs": {}
-    },
-    {
-      "type": "wokwi-text",
-      "id": "virtual_note",
-      "top": -530,
-      "left": 140,
-      "attrs": {
-        "text": "Cells 1-4 = physical GPIO (click Btn). Cells 5-16 = VIRTUAL expander: LED/servo logged to Serial, confirm with PRESS <id> (e.g. PRESS 5). See STATUS."
-      }
     }
   ],
   "connections": [
@@ -724,294 +403,6 @@
       "servo4:PWM",
       "esp:TX2",
       "cyan",
-      []
-    ],
-    [
-      "rgb5:COM",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "btn5:2.l",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "servo5:GND",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "servo5:V+",
-      "esp:3V3",
-      "red",
-      []
-    ],
-    [
-      "rgb6:COM",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "btn6:2.l",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "servo6:GND",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "servo6:V+",
-      "esp:3V3",
-      "red",
-      []
-    ],
-    [
-      "rgb7:COM",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "btn7:2.l",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "servo7:GND",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "servo7:V+",
-      "esp:3V3",
-      "red",
-      []
-    ],
-    [
-      "rgb8:COM",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "btn8:2.l",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "servo8:GND",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "servo8:V+",
-      "esp:3V3",
-      "red",
-      []
-    ],
-    [
-      "rgb9:COM",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "btn9:2.l",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "servo9:GND",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "servo9:V+",
-      "esp:3V3",
-      "red",
-      []
-    ],
-    [
-      "rgb10:COM",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "btn10:2.l",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "servo10:GND",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "servo10:V+",
-      "esp:3V3",
-      "red",
-      []
-    ],
-    [
-      "rgb11:COM",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "btn11:2.l",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "servo11:GND",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "servo11:V+",
-      "esp:3V3",
-      "red",
-      []
-    ],
-    [
-      "rgb12:COM",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "btn12:2.l",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "servo12:GND",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "servo12:V+",
-      "esp:3V3",
-      "red",
-      []
-    ],
-    [
-      "rgb13:COM",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "btn13:2.l",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "servo13:GND",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "servo13:V+",
-      "esp:3V3",
-      "red",
-      []
-    ],
-    [
-      "rgb14:COM",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "btn14:2.l",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "servo14:GND",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "servo14:V+",
-      "esp:3V3",
-      "red",
-      []
-    ],
-    [
-      "rgb15:COM",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "btn15:2.l",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "servo15:GND",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "servo15:V+",
-      "esp:3V3",
-      "red",
-      []
-    ],
-    [
-      "rgb16:COM",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "btn16:2.l",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "servo16:GND",
-      "esp:GND.1",
-      "black",
-      []
-    ],
-    [
-      "servo16:V+",
-      "esp:3V3",
-      "red",
       []
     ]
   ],
