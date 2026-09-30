@@ -166,9 +166,23 @@ All automated unit test suites compiled and passed with **exit code 0 (100% pass
 The system supports enterprise scalability from single small organizers to multi-tier hospital pill cabinets:
 
 ### Supported Matrix Dimensions
-* **2x2 Grid (4 Cells):** Direct physical GPIO wiring on ESP32 DevKit V1 and Wokwi simulator.
-* **4x4 Grid (16 Cells):** Standard pill dispenser matrix; maps cells 1–4 to direct GPIOs and cells 5–16 to expander/virtual drivers.
-* **8x8 Grid (64 Cells):** Large organizer / hospital medicine cabinet; full 64-compartment FSM, servo tracking, and buzzer arbitration.
+* **2x2 Grid (4 Cells):** Direct physical GPIO wiring on ESP32 DevKit V1 and Wokwi simulator. Full LED + button + servo.
+* **4x4 Grid (16 Cells):** Cells 1–4 = physical GPIOs; cells 5–16 = virtual expander (logic + buzzer + OLED + serial, no GPIO).
+* **8x8 Grid (64 Cells):** Cells 1–4 = physical; cells 5–64 = virtual expander with same HAL.
+
+### Physical vs Virtual Cells
+
+| Cells | Mode | LED | Button | Servo | Buzzer/OLED/Scheduler |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| 1–4 | Physical direct GPIO | Real `rgb1-4` wired to D25/D26 etc. | Real `Btn 1-4` wired to D32/D33/D27/D23, click in Wokwi | Real PWM on D18/D19/D5/TX2 | Yes |
+| 5+ | Virtual expander (`pins=-1`) | Tracked + serial `[VIRTUAL] Cell X -> LED RED/GREEN/YELLOW` log, visible in `STATUS` | Not wired in Wokwi (orange `Btn X (V)`). Use serial `PRESS X` / `PRESS r,c` | Angle tracked (`90°` DUE, `0°` otherwise) + serial log, no PWM | Yes |
+
+Why: ESP32 DevKit V1 exposes 19 usable GPIOs. 4 cells × 4 pins + I2C (21/22) + buzzer (15) = 19. No free pins remain, and Wokwi has no native MCP23017/PCA9685. Firmware therefore emulates expanders in software (`CellHardware::isVirtual()`, `injectButtonPress()`).
+
+Virtual API:
+* `cell->isVirtual()`, `controller.isCellVirtual(id)`, `isHardwareCellVirtual(id)`
+* `controller.injectVirtualButtonPress(id)` / bridge `pressHardwareButton(id)` — flows through `update()` → confirmation callback → scheduler, identical to physical press.
+* `STATUS` shows `P`/`V` per cell: `[C05: DUE 90° V]`.
 
 ### Input & Addressing Methods
 1. **Interactive Boot Prompt:** At startup, the user can input dimensions like `2x2`, `4x4`, `8x8`, or a count `1-64`.
@@ -187,14 +201,16 @@ The system supports enterprise scalability from single small organizers to multi
 Because Wokwi's simulator canvas schematic (`diagram.json`) is a static electronic blueprint, runtime C++ firmware cannot dynamically solder or drop new electronic components onto the web canvas. To make configuration effortless, we provide two pathways:
 
 ### A. The Single Point of Entry (Recommended Workflow)
-Edit `medicine-cell-data/config/configuration.json`:
+Edit `medicine-cell-data/config/configuration.json` — firmware + diagram generator read it automatically:
 ```json
 {
   "grid": "4x4",
-  "cellCount": 4
+  "cellCount": 16
 }
 ```
-* **Auto-Synchronization:** PlatformIO's pre-build hook (`extra_script.py`) automatically intercepts the build, reads `configuration.json`, and updates `diagram.json` and `grid_config.json` before compiling. Zero terminal commands needed!
+* **Auto-Synchronization:** PlatformIO's pre-build hook (`extra_script.py`) reads `configuration.json`, regenerates `diagram.json` and `grid_config.json` before compiling. `src/main.cpp` reads the embedded copy at boot: explicit `grid` (e.g. `"4x4"`) calls `setHardwareGrid()`, `"auto"` derives `1->1x1, 2->1x2, <=4->2x2, <=16->4x4, else 8x8` (same mapping as the script). Mismatches (`cellCount` vs `grid` vs `cells[]` length) print `[CONFIG] WARNING` on serial.
+* **Rule:** keep `cellCount == rows*cols == len(cells[])` (4/2x2, 16/4x4, 64/8x8) for a full matrix. Example 4x4 needs 16 `CELL01..CELL16` entries with `hour/minute` schedules.
+* **Virtual canvas:** `scripts/set_diagram_grid.py` wires 1-4 to ESP GPIOs, gives 5+ power-only + orange `Btn X (V)` label + `virtual_note` text (`PRESS <id> to confirm`).
 
 ### B. Manual CLI Generator Tool
 Run the helper script [scripts/set_diagram_grid.py](file:///Users/gabriel/Projects/smart-medicine-remainder/scripts/set_diagram_grid.py):
@@ -221,6 +237,23 @@ python3 scripts/set_diagram_grid.py 2x2   # 4 compartments (2x2)
 
 ### D. Active Grid Status on OLED
 When `GRID 8x8` or `GRID 4x4` is executed, the SSD1306 OLED display updates the active grid indicator in the header bar of the digital clock screen (e.g. `[8x8]`, `[4x4]`), providing instant visual confirmation while maintaining strict role separation.
+
+### E. Serial Commands for Virtual Cells (5+)
+
+| Command | Example | Effect |
+| :--- | :--- | :--- |
+| `STATUS` | `STATUS` | Matrix with `P`/`V` flags, servo angles, buzzer, due/missed lists. |
+| `DUE / MISSED / CONFIRM / RESET` | `DUE 5`, `CONFIRM 2,1` | Direct state triggers, work for physical + virtual. |
+| `PRESS <id \| r,c>` (aliases `BTN`, `BUTTON`) | `PRESS 5`, `PRESS 2,1` | Simulates button press via `injectVirtualButtonPress()` → `update()` → scheduler. Required for virtual cells; also works for 1-4. |
+| `GRID / CELLS` | `GRID 4x4`, `CELLS 16` | Runtime rescale; keeps firmware + OLED label in sync. |
+
+### F. Testing 4x4 Virtual Cells (Example)
+
+1. `configuration.json`: `"grid": "4x4"`, `"cellCount": 16`, 16 cells (CELL05 21:30, CELL06 21:31, ...).
+2. Build (auto-syncs diagram) → Wokwi `STOP` → `START`.
+3. `TIME 21 30 00` → `CELL05 DUE`: serial `[VIRTUAL] Cell 5 -> LED RED | Servo 90°`, buzzer pulses, OLED shows due.
+4. `STATUS` → `[C05: DUE 90° V]`.
+5. `PRESS 5` → GREEN 1s, servo 0°, stock decremented, buzzer re-arbitrated.
 
 
 

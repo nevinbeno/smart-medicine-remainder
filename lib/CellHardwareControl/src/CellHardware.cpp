@@ -8,7 +8,8 @@ CellHardware::CellHardware(uint8_t cellId, const CellPinConfig& config, uint32_t
       _button(config.pinButton, true, DEBOUNCE_DELAY_MS),
       _servo(config.pinServo),
       _confirmStartTime(0),
-      _greenDurationMs(greenDurationMs) {}
+      _greenDurationMs(greenDurationMs),
+      _virtualPressPending(false) {}
 
 void CellHardware::begin() {
     _rgb.begin();
@@ -43,6 +44,29 @@ void CellHardware::applyStateHardware(CellState newState) {
             _servo.close(SERVO_CLOSED_ANGLE);
             break;
     }
+    if (isVirtual()) {
+        logVirtualTransition(newState);
+    }
+}
+
+bool CellHardware::isVirtual() const {
+    return (_config.pinRed < 0 && _config.pinGreen < 0 &&
+            _config.pinButton < 0 && _config.pinServo < 0);
+}
+
+void CellHardware::logVirtualTransition(CellState newState) const {
+    const char* color = "OFF";
+    switch (newState) {
+        case CELL_STATE_ALERTING:  color = "RED (DUE)"; break;
+        case CELL_STATE_CONFIRMED: color = "GREEN (CONFIRMED 1s)"; break;
+        case CELL_STATE_WARNING:   color = "YELLOW (MISSED)"; break;
+        case CELL_STATE_IDLE:
+        default:                   color = "OFF (IDLE)"; break;
+    }
+    // Servo angle mirrors physical behavior: OPEN=90 on DUE, CLOSED=0 otherwise.
+    uint8_t angle = (newState == CELL_STATE_ALERTING) ? SERVO_OPEN_ANGLE : SERVO_CLOSED_ANGLE;
+    Serial.printf("[VIRTUAL] Cell %u -> LED %s | Servo %u deg (%s) | use PRESS %u to confirm\n",
+                  _cellId + 1, color, angle, (angle > 0 ? "OPEN" : "CLOSED"), _cellId + 1);
 }
 
 void CellHardware::triggerMedicineDue() {
@@ -69,6 +93,12 @@ bool CellHardware::update() {
         }
     }
 
-    // 2. Poll debounced button
+    // 2. Virtual button injection (serial PRESS <id>): consume once.
+    if (_virtualPressPending) {
+        _virtualPressPending = false;
+        return true;
+    }
+
+    // 3. Poll debounced button
     return _button.wasPressed();
 }

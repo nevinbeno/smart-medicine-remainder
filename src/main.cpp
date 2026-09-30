@@ -158,6 +158,8 @@ void setup() {
     initHardwareBridge(onHardwareDoseConfirmed, targetCellCount);
 
     // Check if configuration.json specifies an explicit hardware grid (e.g. "4x4", "8x8")
+    // If "auto", derive grid from cellCount with the same mapping as scripts/set_diagram_grid.py
+    // so firmware + Wokwi canvas stay in sync automatically.
     JsonDocument cfgDoc;
     if (!deserializeJson(cfgDoc, configJson.c_str())) {
         const char* explicitGrid = cfgDoc["grid"] | "auto";
@@ -168,13 +170,38 @@ void setup() {
                     setHardwareGrid((uint8_t)gr, (uint8_t)gc);
                     Serial.printf("[CONFIG] Explicit hardware matrix configured to [%ux%u] = %u compartments!\n",
                                   gr, gc, gr * gc);
+                    if ((uint8_t)(gr * gc) != targetCellCount) {
+                        Serial.printf("[CONFIG] NOTE: grid %ux%u (%u) overrides cellCount %u. "
+                                      "Set both to match (e.g. 4/2x2, 16/4x4) for full matrix.\n",
+                                      gr, gc, gr * gc, targetCellCount);
+                    }
                 }
             }
+        } else {
+            // auto: 1->1x1, 2->1x2, <=4->2x2, <=16->4x4, else 8x8 (matches diagram generator)
+            uint8_t ar = 1, ac = targetCellCount;
+            if (targetCellCount <= 1) { ar = 1; ac = 1; }
+            else if (targetCellCount <= 2) { ar = 1; ac = 2; }
+            else if (targetCellCount <= 4) { ar = 2; ac = 2; }
+            else if (targetCellCount <= 16) { ar = 4; ac = 4; }
+            else { ar = 8; ac = 8; }
+            setHardwareGrid(ar, ac);
+            Serial.printf("[CONFIG] Auto grid derived from cellCount %u -> [%ux%u].\n",
+                          targetCellCount, ar, ac);
+        }
+        size_t cellsInJson = cfgDoc["cells"].is<JsonArray>() ? cfgDoc["cells"].as<JsonArray>().size() : 0;
+        if (cellsInJson != getHardwareCellCount()) {
+            Serial.printf("[CONFIG] WARNING: cells[] has %u entries but hardware has %u active. "
+                          "Align cellCount/grid/cells[] in configuration.json.\n",
+                          (unsigned)cellsInJson, getHardwareCellCount());
         }
     }
 
     Serial.printf("Role 4: Cell Hardware & Alert Control initialized with %u active cells (Grid [%ux%u])!\n",
-                  targetCellCount, getHardwareGridRows(), getHardwareGridCols());
+                  getHardwareCellCount(), getHardwareGridRows(), getHardwareGridCols());
+    if (getHardwareCellCount() > 4) {
+        Serial.println("[CONFIG] Cells 1-4 = physical GPIO; Cells 5+ = virtual expander (LED/servo logged, PRESS <id> to confirm).");
+    }
 
     // 5. Initialize Role 2: Scheduling & Time/Event Engine
     scheduleEngine.setTimeProvider(&rtcTimeProvider);
@@ -205,6 +232,7 @@ void setup() {
     Serial.println("  GRID <RxC>          - Scale matrix grid (e.g. GRID 2x2, GRID 4x4, GRID 8x8)");
     Serial.println("  CELLS <1-64>        - Dynamically set number of active cells");
     Serial.println("  CONFIRM <id | r,c>  - Confirm dose for Cell (e.g. CONFIRM 1 or CONFIRM 2,1)");
+    Serial.println("  PRESS <id | r,c>    - Simulate button press (required for virtual Cells 5+)");
     Serial.println("  DUE <id | r,c>      - Manually trigger MEDICINE_DUE for Cell (or row,col)");
     Serial.println("  MISSED <id | r,c>   - Manually trigger MISSED_DOSE for Cell (or row,col)");
     Serial.println("  RESET <id | r,c>    - Reset Cell (or row,col) to IDLE");
@@ -212,7 +240,7 @@ void setup() {
     Serial.println("  LOWSTOCK <1-4>      - Simulate low stock for Cell X (OLED alert)");
     Serial.println("  TIME <HH> <MM> [SS] - Set RTC time (e.g., TIME 07 59 55)");
     Serial.println("  GRACE <minutes>     - Set missed dose grace period in minutes");
-    Serial.println("Or click buttons 'Btn 1' - 'Btn 4' on virtual board!");
+    Serial.println("Or click buttons 'Btn 1' - 'Btn 4' on virtual board! For Cells 5+, use PRESS <id>.");
     Serial.println("=================================================================");
 }
 
@@ -412,6 +440,29 @@ void handleSerialCommands() {
         return;
     }
 
+    if (upperLine.startsWith("PRESS ") || upperLine.startsWith("BTN ") || upperLine.startsWith("BUTTON ")) {
+        int spaceIdx = upperLine.indexOf(' ');
+        String arg = line.substring(spaceIdx + 1);
+        arg.trim();
+        int cellNum = parseCellArg(arg);
+        if (cellNum >= 1 && cellNum <= (int)getHardwareCellCount()) {
+            uint8_t r = 0, c = 0;
+            getHardwareCellGridCoords(cellNum - 1, r, c);
+            Serial.printf("[COMMAND] Simulating button PRESS for Cell %d (Row %u, Col %u)%s\n",
+                          cellNum, r, c,
+                          isHardwareCellVirtual(cellNum - 1) ? " [VIRTUAL expander]" : " [PHYSICAL]");
+            if (!pressHardwareButton(cellNum - 1)) {
+                Serial.printf("[COMMAND] Failed to inject press for Cell %d.\n", cellNum);
+            } else {
+                Serial.println("[HINT] Press flows through update() -> scheduler; check STATUS / OLED / buzzer.");
+            }
+        } else {
+            Serial.printf("Invalid cell: '%s' (Available: 1 to %u, or Row,Col up to %u,%u)\n",
+                          arg.c_str(), getHardwareCellCount(), getHardwareGridRows(), getHardwareGridCols());
+        }
+        return;
+    }
+
     if (upperLine.startsWith("DUE ")) {
         String arg = line.substring(4);
         arg.trim();
@@ -483,6 +534,6 @@ void handleSerialCommands() {
             Serial.printf("Invalid cell number: %d (Available: 1 to %u)\n", cellNum, scheduleEngine.getCellCount());
         }
     } else {
-        Serial.printf("Unknown command: '%s'. Try: STATUS, GRID, CELLS, DUE, CONFIRM, MISSED, RESET, LOWSTOCK, TIME, GRACE\n", line.c_str());
+        Serial.printf("Unknown command: '%s'. Try: STATUS, GRID, CELLS, DUE, CONFIRM, PRESS, MISSED, RESET, LOWSTOCK, TIME, GRACE\n", line.c_str());
     }
 }

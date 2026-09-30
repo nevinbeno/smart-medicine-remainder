@@ -155,6 +155,12 @@ public:
     bool isCellWarning(uint8_t cellId) const;
     bool isCellConfirmed(uint8_t cellId) const;
     bool isCellIdle(uint8_t cellId) const;
+    bool isCellVirtual(uint8_t cellId) const;
+
+    // Simulate a button press for virtual-expander cells (5+). Works for any
+    // active cell; flows through update() -> confirmation callback -> scheduler.
+    bool injectVirtualButtonPress(uint8_t cellId);
+    bool injectVirtualButtonPressGrid(uint8_t row, uint8_t col);
 
     BuzzerController& getBuzzer() { return _buzzer; }
     CellHardware* getCell(uint8_t cellId);

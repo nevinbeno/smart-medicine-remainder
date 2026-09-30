@@ -28,8 +28,10 @@ private:
 
     uint32_t _confirmStartTime;
     uint32_t _greenDurationMs;
+    bool _virtualPressPending;
 
     void applyStateHardware(CellState newState);
+    void logVirtualTransition(CellState newState) const;
 
 public:
     /**
@@ -85,9 +87,20 @@ public:
     bool isConfirmed() const { return _state == CELL_STATE_CONFIRMED; }
     bool isIdle() const { return _state == CELL_STATE_IDLE; }
 
+    // Virtual-expander cells (id >= HW_DIRECT_PIN_CELLS) have no direct GPIO
+    // (pins == -1). They are fully functional in logic + serial/OLED/buzzer,
+    // with LED/servo state tracked and logged. Use injectButtonPress() or
+    // serial PRESS <id> to simulate their button.
+    bool isVirtual() const;
+
     RgbLed& getLed() { return _rgb; }
     DebouncedButton& getButton() { return _button; }
     ServoController& getServo() { return _servo; }
+
+    // Simulate a physical button press for virtual (or physical) cells.
+    // The next update() call returns true once, flowing through the normal
+    // debounce -> confirm -> scheduler callback path.
+    void injectButtonPress() { _virtualPressPending = true; }
 };
 
 #endif // CELL_HARDWARE_H

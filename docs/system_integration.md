@@ -78,7 +78,7 @@ Instead of hard-coding medicines, cell compartments, and schedule hours in code,
 }
 ```
 
-- **Single Point of Entry:** Editing `configuration.json` is the only step required. PlatformIO's pre-build hook (`extra_script.py`) automatically synchronizes Wokwi's visual schematic (`diagram.json`) and `grid_config.json` every time you build or click Play.
+- **Single Point of Entry:** Editing `configuration.json` is the only step required. PlatformIO's pre-build hook (`extra_script.py`) automatically synchronizes Wokwi's visual schematic (`diagram.json`) and `grid_config.json` every time you build or click Play. Firmware reads the embedded copy at boot (`cellCount` + `grid`; `"auto"` derives `1->1x1, 2->1x2, <=4->2x2, <=16->4x4, else 8x8`). Keep `cellCount == rows*cols == len(cells[])` (4/2x2, 16/4x4, 64/8x8).
 - **Embedded in Firmware Flash:** Embedded directly into the firmware image via PlatformIO `board_build.embed_txtfiles`.
 - **Parsed at Runtime:** Deserialized dynamically using `loadConfiguration(json, runtimeConfig)`.
 - **Scalable Matrix Initialization:** Dynamically boots hardware up to `MAX_CELLS` (16 cells by default, extensible to 64 cells for 8x8) and auto-configures the matrix layout (`[1x1]`, `[1x2]`, `[2x2]`, `[4x4]`, `[8x8]`).
@@ -124,18 +124,21 @@ You can type these commands in the Serial Monitor (115200 baud) at any time:
 
 | Command | Description | What to Expect |
 | :--- | :--- | :--- |
-| `STATUS` | Full visual matrix state dump | Shows 2D visual matrix of all active cells, servo angles, buzzer status, active due events, and active missed events. |
+| `STATUS` | Full visual matrix state dump | Shows 2D visual matrix of all active cells with `P`=physical / `V`=virtual flags, servo angles, buzzer status, active due events, and active missed events. |
 | `GRID <RxC>` | Scales matrix dimensions | E.g., `GRID 2x2` (4 cells), `GRID 4x4` (16 cells), `GRID 8x8` (64 cells). Resets deactivated cells and recalculates alerts. |
 | `CELLS <1-64>` | Scales total active cells | Configures hardware to manage X cells at runtime (e.g. `CELLS 16`). Auto-computes matching grid layout. |
 | `TIME <HH> <MM> [SS]` | Adjusts RTC time | E.g. `TIME 07 59 55` puts the clock 5 s before Pantocid (07:00). After 5 s, Servo 4 opens, LED 4 turns RED, Buzzer pulses, OLED shows Pantocid alert. |
 | `TIME 21 59 55` | Test simultaneous doses | Reaches 22:00:00. Servos 2 & 3 open simultaneously. OLED rotates between Cetirizine and Amoxicillin. |
-| `CONFIRM <id \| r,c>` | Simulates button press on a cell | Confirms dose for linear cell ID (e.g. `CONFIRM 1`) or matrix coordinate (e.g. `CONFIRM 2,1`); servo closes, LED turns green, stock decrements. |
-| `DUE <id \| r,c>` | Manually triggers DUE state | Directly activates medicine-due state for Cell ID or `row,col`. |
+| `CONFIRM <id \| r,c>` | Simulates button press on a cell | Confirms dose for linear cell ID (e.g. `CONFIRM 1`) or matrix coordinate (e.g. `CONFIRM 2,1`); servo closes, LED turns green, stock decrements. Works for physical + virtual. |
+| `PRESS <id \| r,c>` (`BTN`, `BUTTON`) | Simulates physical button press | Required for virtual cells 5+ (orange `Btn X (V)` unconnected in Wokwi). E.g. `PRESS 5` flows through `update()` → scheduler. Also works for 1-4. |
+| `DUE <id \| r,c>` | Manually triggers DUE state | Directly activates medicine-due state for Cell ID or `row,col`. Virtual cells log `[VIRTUAL] Cell X -> LED RED \| Servo 90°`. |
 | `MISSED <id \| r,c>` | Manually triggers MISSED state | Puts Cell ID or `row,col` into yellow warning state. |
 | `RESET <id \| r,c>` | Resets single cell | Resets Cell ID or `row,col` to IDLE and dismisses its missed reminder. |
 | `RESET` | Global reset | Resets all active cells and clears all pending reminders. |
 | `LOWSTOCK <1-4>` | **Simulates low stock for Cell X** | Forces `currentStock` to 1 for Cell X. On the next engine tick, a `LOW_STOCK_WARNING` event fires. OLED shows `LOW STOCK WARNING` with medicine name and remaining count for 3 s. |
 | `GRACE <minutes>` | Sets grace period | Adjusts grace period before due alerts transition to missed (e.g. `GRACE 1`). |
+
+> Cells 1-4 are physical GPIO (click `Btn 1-4` in Wokwi). Cells 5+ are virtual expander: LED/servo state is tracked + logged to serial + shown in `STATUS`/`OLED`, buzzer works, confirm with `PRESS <id>`.
 
 ---
 
@@ -159,7 +162,7 @@ python3 scripts/set_diagram_grid.py [1x1 | 1x2 | 2x1 | 2x2]
 python3 scripts/set_diagram_grid.py
 ```
 
-*Note: The ESP32 DevKit V1 has 19 usable GPIOs, which supports up to a 2x2 (4 cells) direct physical testbench. Grids larger than 4 cells (e.g. 4x4, 8x8) are handled seamlessly by the firmware's Hardware Abstraction Layer (HAL).*
+*Note: The ESP32 DevKit V1 has 19 usable GPIOs, which supports up to a 2x2 (4 cells) direct physical testbench. Cells 1-4 are wired; cells 5+ are virtual expander (power-only on canvas, orange `Btn X (V)` label). Firmware tracks + logs virtual LED/servo, buzzer/OLED/scheduler work, confirm with `PRESS <id>`. See `docs/cell_hardware_control.md` §7 + `grid_config.json:virtual_confirm_command`.*
 
 ---
 

@@ -145,8 +145,9 @@ def generate_diagram(rows, cols):
 
         top = base_top + (r * row_height)
         left = 140 + (c * col_width)
+        is_virtual = i >= len(CELL_PINS)
 
-        # 1. RGB LED
+        # 1. RGB LED (virtual cells: visual only, driven by firmware virtual HAL + serial log)
         parts.append({
             "type": "wokwi-rgb-led",
             "id": f"rgb{cell_id}",
@@ -155,16 +156,17 @@ def generate_diagram(rows, cols):
             "attrs": { "common": "cathode" }
         })
 
-        # 2. Pushbutton
+        # 2. Pushbutton (virtual cells: unconnected in Wokwi, use serial PRESS <id>)
+        btn_label = f"Btn {cell_id} (V)" if is_virtual else f"Btn {cell_id}"
         parts.append({
             "type": "wokwi-pushbutton",
             "id": f"btn{cell_id}",
             "top": top,
             "left": left + 80,
-            "attrs": { "color": "green", "label": f"Btn {cell_id}" }
+            "attrs": { "color": "green" if not is_virtual else "orange", "label": btn_label }
         })
 
-        # 3. Servo Motor
+        # 3. Servo Motor (virtual cells: angle tracked + logged, no PWM pin)
         parts.append({
             "type": "wokwi-servo",
             "id": f"servo{cell_id}",
@@ -180,12 +182,23 @@ def generate_diagram(rows, cols):
         connections.append([ f"servo{cell_id}:V+", "esp:3V3", "red", [] ])
 
         # Cells 1 to 4: Wire to physical ESP32 GPIOs
-        if i < len(CELL_PINS):
+        # Cells 5+: virtual expander (no free GPIOs on ESP32 DevKit V1) - see firmware virtual HAL.
+        if not is_virtual:
             cfg = CELL_PINS[i]
             connections.append([ f"rgb{cell_id}:R", cfg["red_pin"], "red", [] ])
             connections.append([ f"rgb{cell_id}:G", cfg["green_pin"], "green", [] ])
             connections.append([ f"btn{cell_id}:1.l", cfg["btn_pin"], "purple" if cell_id % 2 != 0 else "orange", [] ])
             connections.append([ f"servo{cell_id}:PWM", cfg["servo_pin"], "cyan", [] ])
+
+    # Shared annotation for virtual grids so Wokwi users know how to confirm.
+    if total_cells > len(CELL_PINS):
+        parts.append({
+            "type": "wokwi-text",
+            "id": "virtual_note",
+            "top": base_top - 60,
+            "left": 140,
+            "attrs": { "text": f"Cells 1-4 = physical GPIO (click Btn). Cells 5-{total_cells} = VIRTUAL expander: LED/servo logged to Serial, confirm with PRESS <id> (e.g. PRESS 5). See STATUS." }
+        })
 
     diagram_data = {
         "version": 1,
@@ -244,6 +257,25 @@ def sync_diagram_from_config(root_dir=None, explicit_grid=None):
     with open(diagram_file, "w") as f:
         json.dump(diagram, f, indent=2)
 
+    # Cross-check cellCount vs grid capacity for auto-configuration transparency.
+    med_cell_count = None
+    med_cells_len = None
+    try:
+        if os.path.exists(med_config_file):
+            with open(med_config_file, "r") as f:
+                med_cfg_check = json.load(f)
+                med_cell_count = med_cfg_check.get("cellCount")
+                if isinstance(med_cfg_check.get("cells"), list):
+                    med_cells_len = len(med_cfg_check["cells"])
+    except Exception:
+        pass
+    if med_cell_count is not None and med_cell_count != total_cells:
+        print(f"[AUTO-SYNC] NOTE: configuration.json cellCount={med_cell_count} but grid [{rows}x{cols}]={total_cells}. "
+              f"Firmware uses grid size as active count. Align both (4/2x2, 16/4x4, 64/8x8) for full matrix.")
+    if med_cells_len is not None and med_cells_len != total_cells:
+        print(f"[AUTO-SYNC] WARNING: configuration.json cells[] has {med_cells_len} entries but grid needs {total_cells}. "
+              f"Add missing CELL05.. entries and match cellCount.")
+
     config_data = {
         "grid": f"{rows}x{cols}",
         "rows": rows,
@@ -251,7 +283,9 @@ def sync_diagram_from_config(root_dir=None, explicit_grid=None):
         "total_compartments": total_cells,
         "physical_direct_gpio_cells": min(total_cells, 4),
         "virtual_expander_cells": max(0, total_cells - 4),
-        "note": "ESP32 DevKit V1 has 19 usable GPIOs, allowing 4 direct physical GPIO compartments. Grids larger than 4 cells (4x4, 8x8) are rendered on canvas with power buses and managed by the firmware HAL."
+        "cellCount": med_cell_count if med_cell_count is not None else total_cells,
+        "virtual_confirm_command": "PRESS <id | r,c> (e.g. PRESS 5 or PRESS 2,1)",
+        "note": "ESP32 DevKit V1 has 19 usable GPIOs, allowing 4 direct physical GPIO compartments. Grids larger than 4 cells (4x4, 8x8) are rendered on canvas with power buses and managed by the firmware virtual-expander HAL (LED/servo logged, PRESS to confirm)."
     }
     with open(grid_config_file, "w") as f:
         json.dump(config_data, f, indent=2)

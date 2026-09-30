@@ -11,8 +11,9 @@
 - I'd recommend to store the key in an `.env` file. 
 - Drag and drop option won't be available in the VS Code extension for free users (available only for Hobby+ and Pro users).
 - **To configure the physical grid on the canvas (e.g. 1x1, 1x2, 2x2, 4x4, 8x8):**
-  - **Single Point of Entry (Recommended):** Set `"grid"` in `medicine-cell-data/config/configuration.json` (e.g. `"4x4"`, `"2x2"`, or `"auto"`). PlatformIO automatically synchronizes `diagram.json` and `grid_config.json` every time you build or click Play in Wokwi!
+  - **Single Point of Entry (Recommended):** Set `"grid"` in `medicine-cell-data/config/configuration.json` (e.g. `"4x4"`, `"2x2"`, or `"auto"`). PlatformIO automatically synchronizes `diagram.json` and `grid_config.json` every time you build or click Play in Wokwi! Keep `cellCount == rows*cols == len(cells[])` (4/2x2, 16/4x4).
   - **Manual CLI (Alternative):** Run `python3 scripts/set_diagram_grid.py 4x4` (or `2x2`, `8x8`). This automatically generates and wires `diagram.json` with zero manual copy-pasting.
+- **Cells 5+ are virtual expander** (ESP32 has no free GPIOs after 1-4 + I2C + buzzer = 19 pins). `Btn 5+` shows `(V)` orange and is power-only in Wokwi — confirm with serial `PRESS 5` / `PRESS 2,1`. LED/servo state is logged (`[VIRTUAL] ...`) + shown in `STATUS` with `V` flag. See `docs/cell_hardware_control.md`.
 
 ## System Arch (at the moment)
 ```txt

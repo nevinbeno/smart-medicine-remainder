@@ -5,5 +5,7 @@
   "total_compartments": 16,
   "physical_direct_gpio_cells": 4,
   "virtual_expander_cells": 12,
-  "note": "ESP32 DevKit V1 has 19 usable GPIOs, allowing 4 direct physical GPIO compartments. Grids larger than 4 cells (4x4, 8x8) are rendered on canvas with power buses and managed by the firmware HAL."
+  "cellCount": 16,
+  "virtual_confirm_command": "PRESS <id | r,c> (e.g. PRESS 5 or PRESS 2,1)",
+  "note": "ESP32 DevKit V1 has 19 usable GPIOs, allowing 4 direct physical GPIO compartments. Grids larger than 4 cells (4x4, 8x8) are rendered on canvas with power buses and managed by the firmware virtual-expander HAL (LED/servo logged, PRESS to confirm)."
 }

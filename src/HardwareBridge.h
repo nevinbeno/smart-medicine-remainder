@@ -51,6 +51,12 @@ uint8_t getHardwareActiveAlertCount();
 const char* getHardwareCellStateString(uint8_t cellIndex);
 bool isHardwareCellServoOpen(uint8_t cellIndex);
 uint8_t getHardwareCellServoAngle(uint8_t cellIndex);
+bool isHardwareCellVirtual(uint8_t cellIndex);
+
+// Simulate button press for virtual-expander cells (5+) via serial PRESS.
+// Flows through update() -> scheduler callback, same as physical Btn 1-4.
+bool pressHardwareButton(uint8_t cellIndex);
+bool pressHardwareButtonGrid(uint8_t row, uint8_t col);
 
 // Diagnostic status dump
 void printHardwareStatus();

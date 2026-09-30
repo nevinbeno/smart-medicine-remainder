@@ -154,8 +154,8 @@
       "top": -355,
       "left": 220,
       "attrs": {
-        "color": "green",
-        "label": "Btn 5"
+        "color": "orange",
+        "label": "Btn 5 (V)"
       }
     },
     {
@@ -180,8 +180,8 @@
       "top": -355,
       "left": 520,
       "attrs": {
-        "color": "green",
-        "label": "Btn 6"
+        "color": "orange",
+        "label": "Btn 6 (V)"
       }
     },
     {
@@ -206,8 +206,8 @@
       "top": -355,
       "left": 820,
       "attrs": {
-        "color": "green",
-        "label": "Btn 7"
+        "color": "orange",
+        "label": "Btn 7 (V)"
       }
     },
     {
@@ -232,8 +232,8 @@
       "top": -355,
       "left": 1120,
       "attrs": {
-        "color": "green",
-        "label": "Btn 8"
+        "color": "orange",
+        "label": "Btn 8 (V)"
       }
     },
     {
@@ -258,8 +258,8 @@
       "top": -240,
       "left": 220,
       "attrs": {
-        "color": "green",
-        "label": "Btn 9"
+        "color": "orange",
+        "label": "Btn 9 (V)"
       }
     },
     {
@@ -284,8 +284,8 @@
       "top": -240,
       "left": 520,
       "attrs": {
-        "color": "green",
-        "label": "Btn 10"
+        "color": "orange",
+        "label": "Btn 10 (V)"
       }
     },
     {
@@ -310,8 +310,8 @@
       "top": -240,
       "left": 820,
       "attrs": {
-        "color": "green",
-        "label": "Btn 11"
+        "color": "orange",
+        "label": "Btn 11 (V)"
       }
     },
     {
@@ -336,8 +336,8 @@
       "top": -240,
       "left": 1120,
       "attrs": {
-        "color": "green",
-        "label": "Btn 12"
+        "color": "orange",
+        "label": "Btn 12 (V)"
       }
     },
     {
@@ -362,8 +362,8 @@
       "top": -125,
       "left": 220,
       "attrs": {
-        "color": "green",
-        "label": "Btn 13"
+        "color": "orange",
+        "label": "Btn 13 (V)"
       }
     },
     {
@@ -388,8 +388,8 @@
       "top": -125,
       "left": 520,
       "attrs": {
-        "color": "green",
-        "label": "Btn 14"
+        "color": "orange",
+        "label": "Btn 14 (V)"
       }
     },
     {
@@ -414,8 +414,8 @@
       "top": -125,
       "left": 820,
       "attrs": {
-        "color": "green",
-        "label": "Btn 15"
+        "color": "orange",
+        "label": "Btn 15 (V)"
       }
     },
     {
@@ -440,8 +440,8 @@
       "top": -125,
       "left": 1120,
       "attrs": {
-        "color": "green",
-        "label": "Btn 16"
+        "color": "orange",
+        "label": "Btn 16 (V)"
       }
     },
     {
@@ -450,6 +450,15 @@
       "top": -125,
       "left": 1210,
       "attrs": {}
+    },
+    {
+      "type": "wokwi-text",
+      "id": "virtual_note",
+      "top": -530,
+      "left": 140,
+      "attrs": {
+        "text": "Cells 1-4 = physical GPIO (click Btn). Cells 5-16 = VIRTUAL expander: LED/servo logged to Serial, confirm with PRESS <id> (e.g. PRESS 5). See STATUS."
+      }
     }
   ],
   "connections": [

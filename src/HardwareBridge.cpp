@@ -121,6 +121,18 @@ uint8_t getHardwareCellServoAngle(uint8_t cellIndex) {
     return (c ? c->getServo().getCurrentAngle() : 0);
 }
 
+bool isHardwareCellVirtual(uint8_t cellIndex) {
+    return cellHardware.isCellVirtual(cellIndex);
+}
+
+bool pressHardwareButton(uint8_t cellIndex) {
+    return cellHardware.injectVirtualButtonPress(cellIndex);
+}
+
+bool pressHardwareButtonGrid(uint8_t row, uint8_t col) {
+    return cellHardware.injectVirtualButtonPressGrid(row, col);
+}
+
 void printHardwareStatus() {
     uint8_t rows = cellHardware.getGridRows();
     uint8_t cols = cellHardware.getGridCols();
@@ -138,7 +150,7 @@ void printHardwareStatus() {
                   cellHardware.getActiveAlertCount() > 0 ? "PULSING" : "SILENT",
                   BUZZER_LEDC_CHANNEL);
     Serial.println("-------------------------------------------------------");
-    Serial.println(" Compartment Grid Matrix [Cell (Row,Col): State | Servo Angle]:");
+    Serial.println(" Compartment Grid Matrix [Cell (Row,Col): State | Servo | Mode]:");
 
     for (uint8_t r = 1; r <= rows; r++) {
         Serial.printf("  Row %u: ", r);
@@ -150,10 +162,12 @@ void printHardwareStatus() {
                                  (cellHardware.isCellWarning((uint8_t)idx) ? "MISSED" :
                                  (cellHardware.isCellConfirmed((uint8_t)idx) ? "CONFIRM" : "IDLE"));
                 uint8_t angle = (cell ? cell->getServo().getCurrentAngle() : 0);
-                Serial.printf("[C%02u: %-7s %2u°] ", idx + 1, st, angle);
+                const char* mode = cellHardware.isCellVirtual((uint8_t)idx) ? "V" : "P";
+                Serial.printf("[C%02u: %-7s %2u° %s] ", idx + 1, st, angle, mode);
             }
         }
         Serial.println();
     }
+    Serial.println(" P=Physical GPIO (Btn/LED/Servo wired)  V=Virtual expander (PRESS <id> to confirm)");
     Serial.println("=======================================================\n");
 }

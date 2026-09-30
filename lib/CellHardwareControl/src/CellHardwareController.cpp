@@ -259,6 +259,25 @@ CellState CellHardwareController::getCellState(uint8_t cellId) const {
     return CELL_STATE_IDLE;
 }
 
+bool CellHardwareController::isCellVirtual(uint8_t cellId) const {
+    if (cellId < _cellCount && _cells[cellId] != nullptr) {
+        return _cells[cellId]->isVirtual();
+    }
+    return cellId >= HW_DIRECT_PIN_CELLS;
+}
+
+bool CellHardwareController::injectVirtualButtonPress(uint8_t cellId) {
+    if (cellId >= _cellCount || _cells[cellId] == nullptr) return false;
+    _cells[cellId]->injectButtonPress();
+    return true;
+}
+
+bool CellHardwareController::injectVirtualButtonPressGrid(uint8_t row, uint8_t col) {
+    int8_t idx = gridCoordsToIndex(row, col);
+    if (idx < 0) return false;
+    return injectVirtualButtonPress((uint8_t)idx);
+}
+
 bool CellHardwareController::isCellAlerting(uint8_t cellId) const {
     return getCellState(cellId) == CELL_STATE_ALERTING;
 }
