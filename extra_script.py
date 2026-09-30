@@ -56,3 +56,15 @@ if os.path.exists(med_src):
         os.path.join(build_dir, "medicine-cell-data"),
         med_src
     )
+
+# Auto-sync Wokwi diagram.json with configuration.json as Single Point of Entry
+try:
+    import sys
+    scripts_dir = os.path.join(project_dir, "scripts")
+    if scripts_dir not in sys.path:
+        sys.path.insert(0, scripts_dir)
+    import set_diagram_grid
+    set_diagram_grid.sync_diagram_from_config(project_dir)
+except Exception as e:
+    print(f"[EXTRA_SCRIPT] Warning auto-syncing diagram.json: {e}")
+

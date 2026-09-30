@@ -4,6 +4,7 @@
 #include <Adafruit_SSD1306.h>
 #include <RTClib.h>
 #include <string>
+#include <ArduinoJson.h>
 
 #include "HardwareBridge.h"
 #include "schedule_event_engine.hpp"
@@ -144,7 +145,7 @@ void setup() {
                               c.medicine.schedules[s].doseQuantity);
             }
         }
-        if (runtimeConfig.cellCount > 0 && runtimeConfig.cellCount <= 4) {
+        if (runtimeConfig.cellCount > 0 && runtimeConfig.cellCount <= MAX_CELLS) {
             targetCellCount = runtimeConfig.cellCount;
         }
     } else {
@@ -155,6 +156,23 @@ void setup() {
 
     // 4. Initialize Role 4: Cell Hardware & Alert Control with dynamic cell count
     initHardwareBridge(onHardwareDoseConfirmed, targetCellCount);
+
+    // Check if configuration.json specifies an explicit hardware grid (e.g. "4x4", "8x8")
+    JsonDocument cfgDoc;
+    if (!deserializeJson(cfgDoc, configJson.c_str())) {
+        const char* explicitGrid = cfgDoc["grid"] | "auto";
+        if (explicitGrid && strcmp(explicitGrid, "auto") != 0) {
+            int gr = 0, gc = 0;
+            if (sscanf(explicitGrid, "%dx%d", &gr, &gc) == 2 || sscanf(explicitGrid, "%dX%d", &gr, &gc) == 2) {
+                if (gr >= 1 && gr <= 8 && gc >= 1 && gc <= 8 && (gr * gc) <= 64) {
+                    setHardwareGrid((uint8_t)gr, (uint8_t)gc);
+                    Serial.printf("[CONFIG] Explicit hardware matrix configured to [%ux%u] = %u compartments!\n",
+                                  gr, gc, gr * gc);
+                }
+            }
+        }
+    }
+
     Serial.printf("Role 4: Cell Hardware & Alert Control initialized with %u active cells (Grid [%ux%u])!\n",
                   targetCellCount, getHardwareGridRows(), getHardwareGridCols());
 

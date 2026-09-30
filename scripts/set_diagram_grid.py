@@ -200,33 +200,50 @@ def generate_diagram(rows, cols):
 
     return diagram_data, total_cells
 
-def main():
-    parser = argparse.ArgumentParser(description="Configure Wokwi diagram.json for matrix grids.")
-    parser.add_argument("grid", nargs="?", default=None, help="Grid size (e.g. 1x1, 1x2, 2x1, 2x2, 4x4, 8x8)")
-    parser.add_argument("--config", default=CONFIG_FILE, help="Path to grid_config.json")
-    args = parser.parse_args()
+def sync_diagram_from_config(root_dir=None, explicit_grid=None):
+    if root_dir is None:
+        root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
-    grid_str = args.grid
+    diagram_file = os.path.join(root_dir, DIAGRAM_FILE)
+    grid_config_file = os.path.join(root_dir, CONFIG_FILE)
+    med_config_file = os.path.join(root_dir, "medicine-cell-data", "config", "configuration.json")
 
-    if not grid_str and os.path.exists(args.config):
+    grid_str = explicit_grid
+
+    # Check configuration.json first as the single source of truth
+    if not grid_str and os.path.exists(med_config_file):
         try:
-            with open(args.config, "r") as f:
+            with open(med_config_file, "r") as f:
+                med_cfg = json.load(f)
+                grid_val = med_cfg.get("grid")
+                if grid_val and str(grid_val).lower() != "auto":
+                    grid_str = str(grid_val)
+                    print(f"[AUTO-SYNC] Read explicit grid '{grid_str}' from {os.path.relpath(med_config_file, root_dir)}")
+                else:
+                    cell_count = med_cfg.get("cellCount", 4)
+                    grid_str = str(cell_count)
+                    print(f"[AUTO-SYNC] Derived grid from cellCount={cell_count} in {os.path.relpath(med_config_file, root_dir)}")
+        except Exception as e:
+            print(f"[AUTO-SYNC] Warning reading {med_config_file}: {e}")
+
+    # Fallback to grid_config.json if configuration.json is not present
+    if not grid_str and os.path.exists(grid_config_file):
+        try:
+            with open(grid_config_file, "r") as f:
                 data = json.load(f)
                 grid_str = data.get("grid", "2x2")
-                print(f"[CONFIG] Read grid '{grid_str}' from {args.config}")
-        except Exception as e:
-            print(f"[WARN] Failed to read {args.config}: {e}")
+        except Exception:
             grid_str = "2x2"
-    elif not grid_str:
+
+    if not grid_str:
         grid_str = "2x2"
 
     rows, cols = parse_grid_str(grid_str)
     diagram, total_cells = generate_diagram(rows, cols)
 
-    with open(DIAGRAM_FILE, "w") as f:
+    with open(diagram_file, "w") as f:
         json.dump(diagram, f, indent=2)
 
-    # Save to grid_config.json as the persistent configuration variable
     config_data = {
         "grid": f"{rows}x{cols}",
         "rows": rows,
@@ -236,8 +253,19 @@ def main():
         "virtual_expander_cells": max(0, total_cells - 4),
         "note": "ESP32 DevKit V1 has 19 usable GPIOs, allowing 4 direct physical GPIO compartments. Grids larger than 4 cells (4x4, 8x8) are rendered on canvas with power buses and managed by the firmware HAL."
     }
-    with open(CONFIG_FILE, "w") as f:
+    with open(grid_config_file, "w") as f:
         json.dump(config_data, f, indent=2)
+
+    print(f"[AUTO-SYNC] Synchronized Wokwi canvas diagram.json to [{rows}x{cols}] ({total_cells} compartments)")
+    return rows, cols, total_cells
+
+def main():
+    parser = argparse.ArgumentParser(description="Configure Wokwi diagram.json for matrix grids.")
+    parser.add_argument("grid", nargs="?", default=None, help="Grid size (e.g. 1x1, 1x2, 2x1, 2x2, 4x4, 8x8)")
+    parser.add_argument("--config", default=CONFIG_FILE, help="Path to grid_config.json")
+    args = parser.parse_args()
+
+    rows, cols, total_cells = sync_diagram_from_config(explicit_grid=args.grid)
 
     print(f"============================================================")
     print(f" SUCCESS: diagram.json updated for [{rows}x{cols}] Grid ({total_cells} Compartments)!")
