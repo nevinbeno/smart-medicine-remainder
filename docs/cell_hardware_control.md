@@ -6,11 +6,11 @@
 In the **Smart Medicine Reminder and Dose Management System**, the system architecture strictly separates **scheduling logic** from **physical hardware actuation**.
 
 ### Role Scope & Boundary Contract
-- **Our Responsibility (Role 4 - Pavithra):** The physical hardware control of **dynamic medicine compartments (1 to 4 cells)**, alerts, actuators, debouncing, multi-cell arbitration, and local state transitions.
+- **Our Responsibility (Role 4 - Pavithra):** The physical hardware control of **scalable matrix compartments (1 to 64 cells, 1x1 to 8x8)**, alerts, actuators, debouncing, multi-cell arbitration, local state transitions, and Wokwi Single Point of Entry auto-sync.
 - **Architectural Principle:**
   - The Scheduling Engine (Role 2) decides: *"When is a medicine due?"*
   - The Dose Manager (Role 5) decides: *"When to decrement inventory and log dose history."*
-  - Our Module (Role 4 - Pavithra) decides: *"What does the physical hardware (LED, Buzzer, Servo) do when an event occurs, and when the user physically presses the confirm button?"*
+  - Our Module (Role 4 - Pavithra) decides: *"What does the physical hardware (LED, Buzzer, Servo) do when an event occurs, and when the user physically presses the confirm button across any scalable matrix grid?"*
 
 ```
    [Role 2: Scheduler]                       [Role 5: Dose Manager]
@@ -22,31 +22,38 @@ In the **Smart Medicine Reminder and Dose Management System**, the system archit
 │              ROLE 4: CELL HARDWARE & ALERT CONTROL                      │
 │                                                                         │
 │  ┌──────────────────────┐  ┌──────────────────────┐  ┌───────────────┐ │
-│  │   Cell 1 Hardware    │  │   Cell 2 Hardware    │  │   Cell 3 & 4  │ │
-│  │   • RGB: D25 / D26   │  │   • RGB: D14 / D16   │  │   • RGB: D13/12│ │
-│  │   • Btn: D32         │  │   • Btn: D33         │  │     & D4/2    │ │
-│  │   • Servo 1: D18     │  │   • Servo 2: D19     │  │   • Btn: D27/23│ │
-│  │   • FSM (Indep.)     │  │   • FSM (Indep.)     │  │   • Servo 3 & 4│ │
+│  │   Cell 1 Hardware    │  │   Cell 2 Hardware    │  │ Cells 3 to 64 │ │
+│  │   • RGB: D25 / D26   │  │   • RGB: D14 / D16   │  │ • Matrix Grid │ │
+│  │   • Btn: D32         │  │   • Btn: D33         │  │ • 1x1 to 8x8  │ │
+│  │   • Servo 1: D18     │  │   • Servo 2: D19     │  │ • HAL Layer   │ │
+│  │   • FSM (Indep.)     │  │   • FSM (Indep.)     │  │ • Indep. FSM  │ │
 │  └──────────────────────┘  └──────────────────────┘  └───────────────┘ │
 │                                                                         │
 │  ┌───────────────────────────────────────────────────────────────────┐  │
-│  │ Common Buzzer Arbitration (GPIO 15, LEDC Channel 6 / Timer 3)      │  │
-│  │ • 2500 Hz intermittent pulse while active alerting count > 0       │  │
-│  │ • Confirming Cell 1 does NOT stop alert if Cell 2 is still active! │  │
+│  │ Common Buzzer Arbitration (GPIO 15, Multi-Cell Alert Cadence)     │  │
+│  │ • 800 Hz intermittent pulse while active alerting count > 0        │  │
+│  │ • Confirming Cell 1 does NOT stop alert if other cells are active!│  │
 │  └───────────────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-
 ### Test Verification & Results
-- Verified with embedded PlatformIO builds and standalone native unit tests (`test_cell_hardware_native.cpp`):
-  - **Test 1:** Initial 4-cell state (all 4 cells IDLE, all 4 servos closed at 0°, buzzer silent) -> **PASSED**.
-  - **Test 2:** Cell 4 servo independently opens to 90° on `MEDICINE_DUE` while Servos 1, 2, 3 remain closed at 0° -> **PASSED**.
-  - **Test 3:** Cells 1, 2, 3 servos independently open to 90° on their respective alerts -> **PASSED**.
-  - **Test 4:** Common buzzer arbitration with simultaneous alerts (Cells 1 and 2 due -> confirm Cell 1 -> buzzer remains ON because Cell 2 is still active -> confirm Cell 2 -> buzzer silences immediately) -> **PASSED**.
-  - **Test 5:** Physical button debounce (50ms) and 1-second green LED confirmation auto-reset -> **PASSED**.
+- Verified with embedded PlatformIO builds and standalone native unit tests (`test/run_hardware_tests.sh`):
+  - **12/12 Automated Test Suites Passing (100%)**:
+    1. `test_initial_4cell_state` (servos 0°, LEDs off, buzzer silent) -> **PASSED**.
+    2. `test_individual_servos_open_only_for_due_cell` (only due cell opens to 90°) -> **PASSED**.
+    3. `test_confirm_closes_only_that_cells_servo` (confirmation resets only the pressed cell) -> **PASSED**.
+    4. `test_common_buzzer_arbitration_across_all_4_cells` (arbitration without race conditions) -> **PASSED**.
+    5. `test_dynamic_cell_count_initialization` (clean 1-to-64 initialization) -> **PASSED**.
+    6. `test_dynamic_setCellCount_expansion` (runtime dynamic expansion) -> **PASSED**.
+    7. `test_dynamic_setCellCount_reduction_and_cleanup` (safe deactivation & servo zeroing) -> **PASSED**.
+    8. `test_dynamic_cell_count_bounds_validation` (invalid bounds protection) -> **PASSED**.
+    9. `test_matrix_grid_2x2_4x4_8x8_scaling` (matrix dimension auto-layout) -> **PASSED**.
+    10. `test_matrix_grid_coordinate_translation_and_triggers` (dual addressing `r,c` and linear) -> **PASSED**.
+    11. `test_matrix_grid_8x8_buzzer_arbitration` (64-compartment buzzer arbitration) -> **PASSED**.
+    12. `test_4x4_single_compartment_complete_isolation` (strict single-compartment isolation) -> **PASSED**.
 
 ---
 
@@ -175,38 +182,31 @@ The system supports enterprise scalability from single small organizers to multi
 
 ---
 
-## 8. Managing Wokwi Circuit Layout via `grid_config.json` and Generator Script
+## 8. Managing Wokwi Circuit Layout via Single Point of Entry & Generator Tool
 
-Because Wokwi's simulator canvas schematic (`diagram.json`) is a static electronic blueprint, runtime C++ firmware cannot dynamically solder or drop new electronic components onto the web canvas. To reconfigure the physical parts on the simulator canvas, use our automated setup:
+Because Wokwi's simulator canvas schematic (`diagram.json`) is a static electronic blueprint, runtime C++ firmware cannot dynamically solder or drop new electronic components onto the web canvas. To make configuration effortless, we provide two pathways:
 
-### A. Configuration Variable: `grid_config.json`
-Edit [grid_config.json](file:///Users/gabriel/Projects/smart-medicine-remainder/grid_config.json) in the project root:
+### A. The Single Point of Entry (Recommended Workflow)
+Edit `medicine-cell-data/config/configuration.json`:
 ```json
 {
-  "grid": "2x2",
-  "rows": 2,
-  "cols": 2,
-  "total_compartments": 4
+  "grid": "4x4",
+  "cellCount": 4
 }
 ```
+* **Auto-Synchronization:** PlatformIO's pre-build hook (`extra_script.py`) automatically intercepts the build, reads `configuration.json`, and updates `diagram.json` and `grid_config.json` before compiling. Zero terminal commands needed!
 
-Supported direct physical layouts:
-* `"1x1"`: 1 Compartment (Cell 1: 1 Servo, 1 RGB LED, 1 Pushbutton)
-* `"1x2"`: 2 Compartments in 1 row (Cells 1–2)
-* `"2x1"`: 2 Compartments in 1 column (Cells 1 and 3)
-* `"2x2"`: 4 Compartments in a 2x2 square (Cells 1–4, **maximum direct GPIOs on ESP32**)
-
-### B. Updating `diagram.json` with Generator Script
+### B. Manual CLI Generator Tool
 Run the helper script [scripts/set_diagram_grid.py](file:///Users/gabriel/Projects/smart-medicine-remainder/scripts/set_diagram_grid.py):
 
 ```bash
-# Option 1: Pass layout directly via CLI argument
-python3 scripts/set_diagram_grid.py 1x1   # 1 compartment on canvas
-python3 scripts/set_diagram_grid.py 1x2   # 2 compartments on canvas (1x2)
-python3 scripts/set_diagram_grid.py 2x2   # 4 compartments on canvas (2x2)
-
-# Option 2: Apply the settings saved in grid_config.json
+# Auto-sync directly from configuration.json:
 python3 scripts/set_diagram_grid.py
+
+# Or force an explicit grid size:
+python3 scripts/set_diagram_grid.py 4x4   # 16 compartments (4x4)
+python3 scripts/set_diagram_grid.py 8x8   # 64 compartments (8x8)
+python3 scripts/set_diagram_grid.py 2x2   # 4 compartments (2x2)
 ```
 
 ### C. Physical GPIO Budget on ESP32 DevKit V1

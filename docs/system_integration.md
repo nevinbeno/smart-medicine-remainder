@@ -6,7 +6,7 @@ This document describes the complete integration between:
 1. **Role 1 (Medicine & Cell Data)**: Dynamic JSON configuration loader (`configuration.json`).
 2. **Role 2 (Scheduling & Time/Event Engine)**: Real-time RTC-driven scheduling, simultaneous due dose detection, and grace-period missed dose evaluation.
 3. **Role 3 (OLED UI & Notification Engine)**: Non-blocking visual renderer for clock, active due alerts, missed banners, and dose confirmations.
-4. **Role 4 (Cell Hardware & Alert Control - Pavithra)**: Independent RGB LEDs, dedicated servos, debounced buttons, dynamic cell count scaling (1 to 4 cells), and arbitrated common alert buzzer.
+4. **Role 4 (Cell Hardware & Alert Control - Pavithra)**: Independent RGB LEDs, dedicated servos, debounced buttons, dynamic matrix grid scaling (1 to 64 cells, 1x1 to 8x8), buzzer arbitration, and Wokwi Single Point of Entry auto-sync.
 
 ---
 
@@ -61,25 +61,28 @@ This document describes the complete integration between:
 
 ---
 
-## 3. Dynamic Configuration Loading
+## 3. Dynamic Configuration Loading & Single Point of Entry
 
-Instead of hard-coding medicines, cell compartments, and schedule hours in code, all schedule metadata is loaded directly from `medicine-cell-data/config/configuration.json`:
+Instead of hard-coding medicines, cell compartments, and schedule hours in code, all schedule metadata and the hardware grid layout are configured directly from `medicine-cell-data/config/configuration.json`:
 
 ```json
 {
+    "grid": "auto",
     "cellCount": 4,
     "cells": [
         { "cellId": "CELL01", "state": "OCCUPIED", "currentStock": 20, "medicine": { "name": "Paracetamol", "schedules": [{ "hour": 8, "minute": 0 }, { "hour": 20, "minute": 0 }] } },
         { "cellId": "CELL02", "state": "OCCUPIED", "currentStock": 10, "medicine": { "name": "Cetirizine",  "schedules": [{ "hour": 22, "minute": 0 }] } },
         { "cellId": "CELL03", "state": "OCCUPIED", "currentStock": 15, "medicine": { "name": "Amoxicillin", "schedules": [{ "hour": 13, "minute": 0 }, { "hour": 22, "minute": 0 }] } },
-        { "cellId": "CELL04", "state": "OCCUPIED", "currentStock": 8,  "medicine": { "name": "Pantocid",    "schedules": [{ "hour": 7, "minute": 0 }] } }
+        { "cellId": "CELL04", "state": "OCCUPIED", "currentStock": 4,  "medicine": { "name": "Pantocid",    "schedules": [{ "hour": 23, "minute": 50 }] } }
     ]
 }
 ```
 
-- Embedded directly into the firmware image via PlatformIO `board_build.embed_txtfiles`.
-- Parsed at runtime using `loadConfiguration(json, runtimeConfig)`.
-- Injected into the scheduling engine via `ConfigurationAdapter::loadIntoEngine(runtimeConfig, scheduleEngine)`.
+- **Single Point of Entry:** Editing `configuration.json` is the only step required. PlatformIO's pre-build hook (`extra_script.py`) automatically synchronizes Wokwi's visual schematic (`diagram.json`) and `grid_config.json` every time you build or click Play.
+- **Embedded in Firmware Flash:** Embedded directly into the firmware image via PlatformIO `board_build.embed_txtfiles`.
+- **Parsed at Runtime:** Deserialized dynamically using `loadConfiguration(json, runtimeConfig)`.
+- **Scalable Matrix Initialization:** Dynamically boots hardware up to `MAX_CELLS` (16 cells by default, extensible to 64 cells for 8x8) and auto-configures the matrix layout (`[1x1]`, `[1x2]`, `[2x2]`, `[4x4]`, `[8x8]`).
+- **Injected into Scheduler:** Registered directly into the scheduling engine via `ConfigurationAdapter::loadIntoEngine(runtimeConfig, scheduleEngine)`.
 
 ---
 

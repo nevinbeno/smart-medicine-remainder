@@ -10,10 +10,9 @@
 - Once you get the License, come back to VS Code, press `F1`, type `wokwi`, and click the `Wokwi: Manually enter License key`. 
 - I'd recommend to store the key in an `.env` file. 
 - Drag and drop option won't be available in the VS Code extension for free users (available only for Hobby+ and Pro users).
-- **To configure the physical grid on the canvas (e.g. 1x1, 1x2, 2x2):**
-  - Edit `"grid"` in `grid_config.json` (e.g. `"2x2"`, `"1x2"`, `"1x1"`).
-  - Run `python3 scripts/set_diagram_grid.py` (or pass `python3 scripts/set_diagram_grid.py 1x2`).
-  - This automatically generates and wires `diagram.json` without manual copy-pasting.
+- **To configure the physical grid on the canvas (e.g. 1x1, 1x2, 2x2, 4x4, 8x8):**
+  - **Single Point of Entry (Recommended):** Set `"grid"` in `medicine-cell-data/config/configuration.json` (e.g. `"4x4"`, `"2x2"`, or `"auto"`). PlatformIO automatically synchronizes `diagram.json` and `grid_config.json` every time you build or click Play in Wokwi!
+  - **Manual CLI (Alternative):** Run `python3 scripts/set_diagram_grid.py 4x4` (or `2x2`, `8x8`). This automatically generates and wires `diagram.json` with zero manual copy-pasting.
 
 ## System Arch (at the moment)
 ```txt
