@@ -4,7 +4,10 @@
 #include "schedule_event_engine.hpp"
 
 // Check if medicine-cell-data headers are available, or provide compatible layout
-#if __has_include("../../../medicine-cell-data/include/configuration.hpp")
+#if __has_include("../../medicine-cell-data/include/configuration.hpp")
+    #include "../../medicine-cell-data/include/configuration.hpp"
+    #define HAS_EXTERNAL_CONFIG_HPP 1
+#elif __has_include("../../../medicine-cell-data/include/configuration.hpp")
     #include "../../../medicine-cell-data/include/configuration.hpp"
     #define HAS_EXTERNAL_CONFIG_HPP 1
 #elif __has_include("configuration.hpp")

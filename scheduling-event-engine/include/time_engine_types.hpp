@@ -164,7 +164,7 @@ struct EngineCell
     uint8_t scheduleCount;
 
     EngineCell()
-        : cellIndex(0), state(CellState::EMPTY), currentStock(0), lowStockThreshold(2),
+        : cellIndex(0), state(CellState::EMPTY), currentStock(10), lowStockThreshold(2),
           hasMedicine(false), scheduleCount(0)
     {
         cellId[0] = '\0';
