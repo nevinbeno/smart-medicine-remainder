@@ -47,4 +47,9 @@
 - Once you setup the PlatformIO IDE and other extensions, and create a project, you will get all the pre-built libraries. 
 - You will need to create `.toml` file, `diagram.json` file. 
 - You will need to edit the `src/main.cpp` file, `platformio.ini` file. 
-- Folders like `docs/`, `sample/` are created by me, they are not pre-built. 
+- Folders like `docs/`, `sample/` are created by me, they are not pre-built.
+
+## Dose, Stock & Confirmation Management
+- Design, behavior rules, and integration guidance: [docs/dose-stock-confirmation.md](docs/dose-stock-confirmation.md)
+- Hardware-independent dose and inventory logic: [include/dose_manager.h](include/dose_manager.h)
+- Automated native tests: run `pio test -e native`

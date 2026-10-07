@@ -12,6 +12,7 @@
 #include "oled_notification_engine.hpp"
 #include "configuration_loader.hpp"
 #include "configuration_adapter.hpp"
+#include "dose_manager.h"
 
 // Embedded configuration.json text file pointers from PlatformIO
 extern const uint8_t configuration_json_start[] asm("_binary_medicine_cell_data_config_configuration_json_start");
@@ -29,6 +30,9 @@ RTCTimeProvider rtcTimeProvider;
 ScheduleEventEngine scheduleEngine(&rtcTimeProvider);
 OledNotificationEngine oledUi;
 
+// Role 5 Singleton: Dose & Inventory Stock Management
+DoseManager doseManager(5 * 60);
+
 // Forward declarations
 void handleSerialCommands();
 
@@ -45,6 +49,8 @@ void onScheduleEngineEvent(const DoseEvent& event, void* /*userData*/) {
             Serial.printf("\n>>> [SCHEDULER] DOSE_DUE: Cell %u (%s) - %s at %02u:%02u (Dose: %u)\n",
                           event.cellIndex + 1, event.cellId, event.medicineName,
                           event.scheduledTime.hour, event.scheduledTime.minute, event.doseQuantity);
+            doseManager.addDose((uint16_t)(1000 + event.eventId), event.cellIndex + 1, rtc.now().unixtime(), event.doseQuantity);
+            doseManager.update(rtc.now().unixtime());
             // Trigger 4-Cell Hardware: LED RED, Servo OPEN to 90 deg, Buzzer pulsing
             triggerHardwareMedicineDue(event.cellIndex);
             break;
@@ -53,6 +59,7 @@ void onScheduleEngineEvent(const DoseEvent& event, void* /*userData*/) {
             Serial.printf("\n>>> [SCHEDULER] DOSE_MISSED: Cell %u (%s) - %s at %02u:%02u (Grace period expired)\n",
                           event.cellIndex + 1, event.cellId, event.medicineName,
                           event.scheduledTime.hour, event.scheduledTime.minute);
+            doseManager.update(rtc.now().unixtime() + 3600);
             // Trigger 4-Cell Hardware: LED YELLOW (Warning), Servo CLOSED
             triggerHardwareMissedDose(event.cellIndex);
             break;
@@ -68,6 +75,17 @@ void onScheduleEngineEvent(const DoseEvent& event, void* /*userData*/) {
                     Serial.printf("[STOCK] Cell %u (%s) stock decremented to %u\n",
                                   event.cellIndex + 1, event.cellId, cell->currentStock);
                 }
+                DoseResult result = doseManager.confirmCell(event.cellIndex + 1, rtc.now().unixtime());
+                const CellInventory* inv = doseManager.getCell(event.cellIndex + 1);
+                if (inv) {
+                    const char* resStr = "Confirmed";
+                    if (result == DoseResult::ConfirmedLowStock) resStr = "Confirmed (LOW STOCK)";
+                    else if (result == DoseResult::ConfirmedStockEmpty) resStr = "Confirmed (STOCK EMPTY)";
+                    else if (result == DoseResult::NoDueDose) resStr = "No Due Dose in Manager";
+                    else if (result == DoseResult::MissedDoseNotCounted) resStr = "Missed Dose Not Counted";
+                    Serial.printf("[DOSE_MANAGER] Cell %u stock: %u (Status: %s)\n",
+                                  event.cellIndex + 1, inv->stock, resStr);
+                }
             }
             // Trigger 4-Cell Hardware: LED GREEN for 1s, Servo CLOSED
             triggerHardwareDoseConfirmed(event.cellIndex);
@@ -76,6 +94,7 @@ void onScheduleEngineEvent(const DoseEvent& event, void* /*userData*/) {
         case EventType::DOSE_DISMISSED:
             Serial.printf("\n>>> [SCHEDULER] DOSE_DISMISSED: Cell %u (%s) - %s\n",
                           event.cellIndex + 1, event.cellId, event.medicineName);
+            doseManager.acknowledgeMissedAlerts();
             // Clear warning state for this cell -> LED OFF
             triggerHardwareReset(event.cellIndex);
             break;
@@ -138,6 +157,7 @@ void setup() {
             RuntimeCell& c = runtimeConfig.cells[i];
             Serial.printf("  Cell %u [%s]: %s (Stock: %u)\n",
                           i + 1, c.cellId, c.hasMedicine ? c.medicine.name : "EMPTY", c.currentStock);
+            doseManager.addCell(i + 1, c.hasMedicine ? c.medicine.name : "Cell", c.currentStock, c.medicine.lowStockThreshold);
             for (uint8_t s = 0; s < c.medicine.scheduleCount; s++) {
                 Serial.printf("    - Schedule: %02u:%02u (Dose: %u)\n",
                               c.medicine.schedules[s].hour,
@@ -238,6 +258,7 @@ void setup() {
     Serial.println("  RESET <id | r,c>    - Reset Cell (or row,col) to IDLE");
     Serial.println("  RESET               - Reset all active cells & dismiss all reminders");
     Serial.println("  LOWSTOCK <1-4>      - Simulate low stock for Cell X (OLED alert)");
+    Serial.println("  RESTOCK <1-N> <qty> - Refill medicine stock using DoseManager");
     Serial.println("  TIME <HH> <MM> [SS] - Set RTC time (e.g., TIME 07 59 55)");
     Serial.println("  GRACE <minutes>     - Set missed dose grace period in minutes");
     Serial.println("Or click buttons 'Btn 1' - 'Btn 4' on virtual board! For Cells 5+, use PRESS <id>.");
@@ -269,7 +290,12 @@ void loop() {
     oledUi.update();
 
     // -------------------------------------------------------------
-    // 4. Interactive Serial Command Processing
+    // 4. Role 5: Dose, Stock & Confirmation Manager
+    // -------------------------------------------------------------
+    doseManager.update(rtc.now().unixtime());
+
+    // -------------------------------------------------------------
+    // 5. Interactive Serial Command Processing
     // -------------------------------------------------------------
     handleSerialCommands();
 
@@ -327,6 +353,19 @@ void handleSerialCommands() {
                               ev->cellIndex + 1, ev->cellId, ev->medicineName,
                               ev->scheduledTime.hour, ev->scheduledTime.minute);
             }
+        }
+        Serial.println("Inventory Stock (Role 5 DoseManager):");
+        for (uint8_t i = 1; i <= getHardwareCellCount(); i++) {
+            const CellInventory* inv = doseManager.getCell(i);
+            if (inv) {
+                Serial.printf("  - Cell %u (%s): Stock %u (Low Threshold: %u, Low: %s)\n",
+                              inv->cellId, inv->medicineName.c_str(), inv->stock,
+                              inv->lowStockThreshold, inv->isLow() ? "YES [ALERT]" : "NO");
+            }
+        }
+        if (doseManager.hasMissedAlert()) {
+            Serial.printf("  [ALERT] DoseManager has pending missed dose alerts (Count: %u)\n",
+                          (unsigned)doseManager.missedDoseCount());
         }
         Serial.println("----------------------------------------\n");
         return;
@@ -533,7 +572,27 @@ void handleSerialCommands() {
         } else {
             Serial.printf("Invalid cell number: %d (Available: 1 to %u)\n", cellNum, scheduleEngine.getCellCount());
         }
+    } else if (upperLine.startsWith("RESTOCK ")) {
+        int cellNum = 0, units = 0;
+        if (sscanf(line.c_str() + 8, "%d %d", &cellNum, &units) == 2 && cellNum >= 1 && units > 0) {
+            bool ok = doseManager.restockCell((uint8_t)cellNum, (uint16_t)units);
+            if (cellNum <= (int)scheduleEngine.getCellCount()) {
+                EngineCell* cell = scheduleEngine.getCellMutable(cellNum - 1);
+                if (cell) {
+                    cell->currentStock += units;
+                }
+            }
+            if (ok) {
+                const CellInventory* inv = doseManager.getCell((uint8_t)cellNum);
+                Serial.printf("[COMMAND] Cell %d restocked +%d units. New stock: %u (Low: %s)\n",
+                              cellNum, units, inv ? inv->stock : 0, (inv && inv->isLow()) ? "YES" : "NO");
+            } else {
+                Serial.printf("[COMMAND] Failed to restock Cell %d (invalid cell or overflow)\n", cellNum);
+            }
+        } else {
+            Serial.println("Usage: RESTOCK <cellNum> <units> (e.g. RESTOCK 1 10)");
+        }
     } else {
-        Serial.printf("Unknown command: '%s'. Try: STATUS, GRID, CELLS, DUE, CONFIRM, PRESS, MISSED, RESET, LOWSTOCK, TIME, GRACE\n", line.c_str());
+        Serial.printf("Unknown command: '%s'. Try: STATUS, GRID, CELLS, DUE, CONFIRM, PRESS, MISSED, RESET, LOWSTOCK, RESTOCK, TIME, GRACE\n", line.c_str());
     }
 }
