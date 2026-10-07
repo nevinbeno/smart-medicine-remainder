@@ -5,12 +5,16 @@
 CellHardwareController cellHardware(ACTIVE_CELL_COUNT);
 
 static BridgeConfirmCallback g_bridgeConfirmCallback = nullptr;
+static bool g_suppressCallback = false;
 
 /**
  * @brief Outbound Event Handler: DOSE_CONFIRMED
  *        Invoked when physical confirm button on a cell is debounced and pressed.
  */
 static void internalConfirmCallback(uint8_t cellId) {
+    if (g_suppressCallback) {
+        return;
+    }
     Serial.printf("\n>>> [HARDWARE EVENT] Physical DOSE_CONFIRMED button pressed on Cell %u!\n", cellId + 1);
     Serial.printf("    Hardware Action: Cell %u RGB is GREEN for 1s. Servo %u is CLOSED.\n\n", cellId + 1, cellId + 1);
     if (g_bridgeConfirmCallback) {
@@ -72,7 +76,10 @@ bool triggerHardwareMissedDose(uint8_t cellIndex) {
 }
 
 bool triggerHardwareDoseConfirmed(uint8_t cellIndex) {
-    return cellHardware.triggerDoseConfirmed(cellIndex);
+    g_suppressCallback = true;
+    bool res = cellHardware.triggerDoseConfirmed(cellIndex);
+    g_suppressCallback = false;
+    return res;
 }
 
 bool triggerHardwareReset(uint8_t cellIndex) {
@@ -92,7 +99,10 @@ bool triggerHardwareMissedDoseGrid(uint8_t row, uint8_t col) {
 }
 
 bool triggerHardwareDoseConfirmedGrid(uint8_t row, uint8_t col) {
-    return cellHardware.triggerDoseConfirmedGrid(row, col);
+    g_suppressCallback = true;
+    bool res = cellHardware.triggerDoseConfirmedGrid(row, col);
+    g_suppressCallback = false;
+    return res;
 }
 
 bool triggerHardwareResetGrid(uint8_t row, uint8_t col) {

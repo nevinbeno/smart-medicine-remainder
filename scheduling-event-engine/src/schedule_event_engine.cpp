@@ -122,6 +122,65 @@ bool ScheduleEventEngine::updateCellStock(uint8_t cellIndex, uint16_t newStock)
         return false;
     }
     cells[cellIndex].currentStock = newStock;
+    if (newStock > cells[cellIndex].lowStockThreshold)
+    {
+        lastWarnedStock[cellIndex] = 0xFFFFU;
+    }
+    return true;
+}
+
+bool ScheduleEventEngine::triggerDueEvent(uint8_t cellIndex)
+{
+    if (cellIndex >= cellCount)
+    {
+        return false;
+    }
+
+    if (cells[cellIndex].state != CellState::OCCUPIED || !cells[cellIndex].hasMedicine)
+    {
+        return false;
+    }
+
+    if (cells[cellIndex].currentStock == 0)
+    {
+        // Out of stock: cannot trigger due dose
+        return false;
+    }
+
+    if (isCellDue(cellIndex))
+    {
+        return true; // Already due
+    }
+
+    if (dueEventCount >= MAX_ACTIVE_EVENTS)
+    {
+        return false;
+    }
+
+    TimeOfDay currentTime = (timeProvider) ? timeProvider->getCurrentTime() : TimeOfDay();
+
+    DoseEvent event;
+    event.eventId = ++nextEventId;
+    event.type = EventType::DOSE_DUE;
+    event.state = EventState::DUE;
+
+    strncpy(event.cellId, cells[cellIndex].cellId, MAX_ENGINE_ID_LEN - 1);
+    event.cellId[MAX_ENGINE_ID_LEN - 1] = '\0';
+    event.cellIndex = cellIndex;
+
+    strncpy(event.medicineId, cells[cellIndex].medicineId, MAX_ENGINE_ID_LEN - 1);
+    event.medicineId[MAX_ENGINE_ID_LEN - 1] = '\0';
+
+    strncpy(event.medicineName, cells[cellIndex].medicineName, MAX_ENGINE_STRING_LEN - 1);
+    event.medicineName[MAX_ENGINE_STRING_LEN - 1] = '\0';
+
+    event.doseQuantity = 1;
+    event.scheduledTime = currentTime;
+    event.triggeredTime = currentTime;
+    event.triggeredEpoch = (timeProvider) ? timeProvider->getEpochSeconds() : 0;
+
+    activeDueEvents[dueEventCount++] = event;
+    notifyListeners(event);
     return true;
 }
 
@@ -248,6 +307,27 @@ void ScheduleEventEngine::checkSchedules(const TimeOfDay& currentTime)
             if (currentTime.hour == sched.hour && currentTime.minute == sched.minute)
             {
                 sched.triggeredToday = true;
+
+                if (cells[i].currentStock == 0)
+                {
+                    // OUT OF STOCK: cannot dispense dose from empty cell!
+                    DoseEvent emptyEvent;
+                    emptyEvent.eventId = ++nextEventId;
+                    emptyEvent.type = EventType::LOW_STOCK_WARNING;
+                    emptyEvent.state = EventState::IDLE;
+                    strncpy(emptyEvent.cellId, cells[i].cellId, MAX_ENGINE_ID_LEN - 1);
+                    emptyEvent.cellId[MAX_ENGINE_ID_LEN - 1] = '\0';
+                    emptyEvent.cellIndex = i;
+                    strncpy(emptyEvent.medicineId, cells[i].medicineId, MAX_ENGINE_ID_LEN - 1);
+                    emptyEvent.medicineId[MAX_ENGINE_ID_LEN - 1] = '\0';
+                    strncpy(emptyEvent.medicineName, cells[i].medicineName, MAX_ENGINE_STRING_LEN - 1);
+                    emptyEvent.medicineName[MAX_ENGINE_STRING_LEN - 1] = '\0';
+                    emptyEvent.doseQuantity = 0; // Indicates 0 stock
+                    emptyEvent.triggeredTime = currentTime;
+                    emptyEvent.scheduledTime = TimeOfDay(sched.hour, sched.minute);
+                    notifyListeners(emptyEvent);
+                    continue;
+                }
 
                 if (dueEventCount < MAX_ACTIVE_EVENTS)
                 {
@@ -388,6 +468,19 @@ bool ScheduleEventEngine::confirmDose(uint8_t cellIndex)
             confirmedEvent.type = EventType::DOSE_CONFIRMED;
             confirmedEvent.state = EventState::CONFIRMED;
             confirmedEvent.resolvedTime = (timeProvider) ? timeProvider->getCurrentTime() : TimeOfDay();
+
+            // Decrement stock in cell (clamped at 0)
+            if (cells[cellIndex].currentStock > 0)
+            {
+                if (cells[cellIndex].currentStock >= confirmedEvent.doseQuantity)
+                {
+                    cells[cellIndex].currentStock -= confirmedEvent.doseQuantity;
+                }
+                else
+                {
+                    cells[cellIndex].currentStock = 0;
+                }
+            }
 
             removeDueEventByIndex(i);
             notifyListeners(confirmedEvent);

@@ -85,6 +85,29 @@ public:
         return true;
     }
 
+    // Directly decrement stock by units. Clamps at zero.
+    bool decrementStock(uint8_t cellId, uint16_t units = 1) {
+        CellInventory* cell = findCell(cellId);
+        if (cell == NULL || cell->stock == 0) {
+            return false;
+        }
+        if (cell->stock < units) {
+            cell->stock = 0;
+        } else {
+            cell->stock = static_cast<uint16_t>(cell->stock - units);
+        }
+        return true;
+    }
+
+    bool setCellStock(uint8_t cellId, uint16_t newStock) {
+        CellInventory* cell = findCell(cellId);
+        if (cell == NULL) {
+            return false;
+        }
+        cell->stock = newStock;
+        return true;
+    }
+
     // Advance scheduled occurrences to Due or Missed based on RTC time.
     void update(uint64_t now) {
         for (size_t i = 0; i < doses_.size(); ++i) {

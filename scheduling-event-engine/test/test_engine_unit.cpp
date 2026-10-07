@@ -501,6 +501,77 @@ void test_next_scheduled_dose()
 }
 
 // ----------------------------------------------------------------------------
+// Test 12: Stock management: decrement on confirmation, block due when stock is 0
+// ----------------------------------------------------------------------------
+void test_stock_zero_and_decrement()
+{
+    std::cout << "[RUN] test_stock_zero_and_decrement..." << std::endl;
+    clearTestRecords();
+
+    SimulatedTimeProvider timeProvider(8, 0, 0);
+    ScheduleEventEngine engine(&timeProvider);
+    engine.registerEventCallback(testEventCallback);
+
+    EngineCell cell;
+    strncpy(cell.cellId, "CELL01", sizeof(cell.cellId));
+    cell.state = CellState::OCCUPIED;
+    cell.hasMedicine = true;
+    strncpy(cell.medicineName, "Paracetamol", sizeof(cell.medicineName));
+    cell.currentStock = 1; // Only 1 unit in inventory
+    cell.lowStockThreshold = 1;
+    cell.scheduleCount = 2;
+    cell.schedules[0] = DoseSchedule(8, 0, 1);
+    cell.schedules[1] = DoseSchedule(9, 0, 1);
+    engine.addCell(cell);
+
+    // 08:00 -> Due dose triggers because stock == 1
+    engine.update();
+    assert(engine.getDueEventCount() == 1);
+    assert(engine.getCell(0)->currentStock == 1);
+
+    // Confirm dose -> Stock decrements from 1 to 0
+    bool ok = engine.confirmDose(0);
+    assert(ok);
+    assert(engine.getCell(0)->currentStock == 0);
+    assert(engine.getDueEventCount() == 0);
+
+    // Manual triggerDueEvent must be rejected when stock is 0
+    assert(engine.triggerDueEvent(0) == false);
+
+    // Clear recorded events and advance to 09:00:00 (second schedule)
+    clearTestRecords();
+    timeProvider.advanceSeconds(3600); // Now 09:00:00
+    engine.update();
+
+    // Since stock is 0, DOSE_DUE must NOT be placed into active due events!
+    assert(engine.getDueEventCount() == 0);
+    assert(!engine.hasActiveDueEvents());
+
+    // Instead, LOW_STOCK_WARNING with doseQuantity == 0 (out of stock) should be emitted
+    assert(g_recordedEvents.size() >= 1);
+    bool sawOutOfStock = false;
+    for (const auto& ev : g_recordedEvents)
+    {
+        if (ev.type == EventType::LOW_STOCK_WARNING && ev.doseQuantity == 0)
+        {
+            sawOutOfStock = true;
+            break;
+        }
+    }
+    assert(sawOutOfStock);
+
+    // Refill stock to 5 units
+    assert(engine.updateCellStock(0, 5));
+    assert(engine.getCell(0)->currentStock == 5);
+
+    // Now manual triggerDueEvent should succeed
+    assert(engine.triggerDueEvent(0) == true);
+    assert(engine.getDueEventCount() == 1);
+
+    std::cout << "  [PASS] Stock properly decrements to 0, blocks DUE when empty, and resumes on refill" << std::endl;
+}
+
+// ----------------------------------------------------------------------------
 // Main test runner
 // ----------------------------------------------------------------------------
 int main()
@@ -520,9 +591,10 @@ int main()
     test_scalability_16_cells();
     test_configuration_adapter();
     test_next_scheduled_dose();
+    test_stock_zero_and_decrement();
 
     std::cout << "========================================" << std::endl;
-    std::cout << " ALL 11 UNIT TESTS PASSED SUCCESSFULLY!" << std::endl;
+    std::cout << " ALL 12 UNIT TESTS PASSED SUCCESSFULLY!" << std::endl;
     std::cout << "========================================" << std::endl;
 
     return 0;

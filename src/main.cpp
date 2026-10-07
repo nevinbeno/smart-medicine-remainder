@@ -67,24 +67,33 @@ void onScheduleEngineEvent(const DoseEvent& event, void* /*userData*/) {
         case EventType::DOSE_CONFIRMED:
             Serial.printf("\n>>> [SCHEDULER] DOSE_CONFIRMED: Cell %u (%s) - %s (Dose %u taken)\n",
                           event.cellIndex + 1, event.cellId, event.medicineName, event.doseQuantity);
-            // Decrement stock in the engine so low-stock checks run against real data.
+            // Stock was decremented inside scheduleEngine.confirmDose; sync with DoseManager and notify
             {
                 EngineCell* cell = scheduleEngine.getCellMutable(event.cellIndex);
-                if (cell && cell->currentStock > 0) {
-                    cell->currentStock--;
-                    Serial.printf("[STOCK] Cell %u (%s) stock decremented to %u\n",
-                                  event.cellIndex + 1, event.cellId, cell->currentStock);
-                }
+                uint16_t remStock = (cell) ? cell->currentStock : 0;
+                uint16_t prevStock = remStock + event.doseQuantity;
+                Serial.printf("[STOCK] Cell %u (%s) stock decremented: %u -> %u\n",
+                              event.cellIndex + 1, event.cellId, prevStock, remStock);
+
                 DoseResult result = doseManager.confirmCell(event.cellIndex + 1, rtc.now().unixtime());
+                if (result == DoseResult::NoDueDose) {
+                    doseManager.decrementStock(event.cellIndex + 1, event.doseQuantity);
+                }
+                if (cell) {
+                    doseManager.setCellStock(event.cellIndex + 1, remStock);
+                }
                 const CellInventory* inv = doseManager.getCell(event.cellIndex + 1);
                 if (inv) {
-                    const char* resStr = "Confirmed";
-                    if (result == DoseResult::ConfirmedLowStock) resStr = "Confirmed (LOW STOCK)";
-                    else if (result == DoseResult::ConfirmedStockEmpty) resStr = "Confirmed (STOCK EMPTY)";
-                    else if (result == DoseResult::NoDueDose) resStr = "No Due Dose in Manager";
-                    else if (result == DoseResult::MissedDoseNotCounted) resStr = "Missed Dose Not Counted";
-                    Serial.printf("[DOSE_MANAGER] Cell %u stock: %u (Status: %s)\n",
-                                  event.cellIndex + 1, inv->stock, resStr);
+                    const char* resStr = "OK";
+                    if (inv->stock == 0) resStr = "OUT OF STOCK (0 units left)";
+                    else if (inv->isLow()) resStr = "LOW STOCK WARNING";
+                    Serial.printf("[DOSE_MANAGER] Cell %u stock: %u (Threshold: %u, Status: %s)\n",
+                                  event.cellIndex + 1, inv->stock, inv->lowStockThreshold, resStr);
+                }
+                if (remStock == 0) {
+                    Serial.printf("[STOCK ALERT] Cell %u is now OUT OF STOCK (0 units left)! Refill needed.\n", event.cellIndex + 1);
+                } else if (cell && remStock <= cell->lowStockThreshold) {
+                    Serial.printf("[LOW STOCK] Cell %u is now LOW STOCK (%u units left)!\n", event.cellIndex + 1, remStock);
                 }
             }
             // Trigger 4-Cell Hardware: LED GREEN for 1s, Servo CLOSED
@@ -105,8 +114,14 @@ void onScheduleEngineEvent(const DoseEvent& event, void* /*userData*/) {
             break;
 
         case EventType::LOW_STOCK_WARNING:
-            Serial.printf("\n>>> [SCHEDULER] LOW_STOCK_WARNING: Cell %u (%s) - %s (Remaining Stock: %u)\n",
-                          event.cellIndex + 1, event.cellId, event.medicineName, event.doseQuantity);
+            if (event.doseQuantity == 0) {
+                Serial.printf("\n>>> [STOCK ALERT] Cell %u (%s) - %s is OUT OF STOCK (0 units)! Scheduled dose skipped. Please RESTOCK.\n",
+                              event.cellIndex + 1, event.cellId, event.medicineName);
+                triggerHardwareMissedDose(event.cellIndex); // Warning LED (yellow), servo stays CLOSED
+            } else {
+                Serial.printf("\n>>> [SCHEDULER] LOW_STOCK_WARNING: Cell %u (%s) - %s (Remaining Stock: %u)\n",
+                              event.cellIndex + 1, event.cellId, event.medicineName, event.doseQuantity);
+            }
             break;
 
         default:
@@ -121,10 +136,36 @@ void onScheduleEngineEvent(const DoseEvent& event, void* /*userData*/) {
  *        or dismisses active MISSED dose notifications, updating the OLED and hardware.
  */
 void onHardwareDoseConfirmed(uint8_t cellId) {
-    Serial.printf("[CONFIRM ACTION] Button pressed for Cell %u. Forwarding to Scheduling Engine...\n", cellId + 1);
+    uint8_t cellNum = cellId + 1;
+    Serial.printf("[CONFIRM ACTION] Button pressed for Cell %u. Checking stock and scheduler...\n", cellNum);
+
+    EngineCell* cell = scheduleEngine.getCellMutable(cellId);
+    const CellInventory* inv = doseManager.getCell(cellNum);
+    uint16_t currentStock = (cell) ? cell->currentStock : (inv ? inv->stock : 0);
+
+    if (currentStock == 0) {
+        Serial.printf("[STOCK ALERT] Cell %u button pressed, but stock is 0 (OUT OF STOCK)! Cannot dispense.\n", cellNum);
+        triggerHardwareReset(cellId);
+        return;
+    }
+
     bool handled = scheduleEngine.handleCellButtonPress(cellId);
     if (!handled) {
-        Serial.printf("[CONFIRM ACTION] Cell %u button pressed, but no pending due or missed dose found in scheduler.\n", cellId + 1);
+        // If not handled by scheduler, check if doseManager has an active due dose
+        DoseResult res = doseManager.confirmCell(cellNum, rtc.now().unixtime());
+        if (res == DoseResult::Confirmed || res == DoseResult::ConfirmedLowStock || res == DoseResult::ConfirmedStockEmpty) {
+            uint16_t rem = doseManager.getCell(cellNum)->stock;
+            if (cell) {
+                cell->currentStock = rem;
+            }
+            Serial.printf("[DOSE_MANAGER] Cell %u confirmed via DoseManager! Remaining stock: %u\n",
+                          cellNum, rem);
+            triggerHardwareDoseConfirmed(cellId);
+        } else {
+            Serial.printf("[CONFIRM] Cell %u has no active due dose to confirm (Stock unchanged: %u units).\n",
+                          cellNum, currentStock);
+            triggerHardwareReset(cellId);
+        }
     }
 }
 
@@ -158,13 +199,18 @@ void setup() {
             Serial.printf("  Cell %u [%s]: %s (Stock: %u)\n",
                           i + 1, c.cellId, c.hasMedicine ? c.medicine.name : "EMPTY", c.currentStock);
             doseManager.addCell(i + 1, c.hasMedicine ? c.medicine.name : "Cell", c.currentStock, c.medicine.lowStockThreshold);
+            DateTime now = rtc.now();
             for (uint8_t s = 0; s < c.medicine.scheduleCount; s++) {
-                Serial.printf("    - Schedule: %02u:%02u (Dose: %u)\n",
-                              c.medicine.schedules[s].hour,
-                              c.medicine.schedules[s].minute,
-                              c.medicine.schedules[s].doseQuantity);
+                uint8_t sh = c.medicine.schedules[s].hour;
+                uint8_t sm = c.medicine.schedules[s].minute;
+                uint16_t sq = c.medicine.schedules[s].doseQuantity;
+                Serial.printf("    - Schedule: %02u:%02u (Dose: %u)\n", sh, sm, sq);
+                DateTime schedDt(now.year(), now.month(), now.day(), sh, sm, 0);
+                uint16_t doseId = (uint16_t)((i + 1) * 100 + s + 1);
+                doseManager.addDose(doseId, i + 1, schedDt.unixtime(), sq);
             }
         }
+        doseManager.update(rtc.now().unixtime());
         if (runtimeConfig.cellCount > 0 && runtimeConfig.cellCount <= MAX_CELLS) {
             targetCellCount = runtimeConfig.cellCount;
         }
@@ -354,14 +400,18 @@ void handleSerialCommands() {
                               ev->scheduledTime.hour, ev->scheduledTime.minute);
             }
         }
-        Serial.println("Inventory Stock (Role 5 DoseManager):");
+        Serial.println("Inventory Stock Status (DoseManager + Scheduler):");
         for (uint8_t i = 1; i <= getHardwareCellCount(); i++) {
             const CellInventory* inv = doseManager.getCell(i);
-            if (inv) {
-                Serial.printf("  - Cell %u (%s): Stock %u (Low Threshold: %u, Low: %s)\n",
-                              inv->cellId, inv->medicineName.c_str(), inv->stock,
-                              inv->lowStockThreshold, inv->isLow() ? "YES [ALERT]" : "NO");
-            }
+            const EngineCell* cell = scheduleEngine.getCell(i - 1);
+            uint16_t stock = (cell) ? cell->currentStock : (inv ? inv->stock : 0);
+            uint16_t threshold = (inv) ? inv->lowStockThreshold : (cell ? cell->lowStockThreshold : 0);
+            const char* statusStr = "OK";
+            if (stock == 0) statusStr = "OUT OF STOCK [0 LEFT]";
+            else if (stock <= threshold) statusStr = "LOW STOCK WARNING";
+            Serial.printf("  - Cell %u (%s): Stock %u | Threshold %u | Status: %s\n",
+                          i, inv ? inv->medicineName.c_str() : (cell ? cell->medicineName : "EMPTY"),
+                          stock, threshold, statusStr);
         }
         if (doseManager.hasMissedAlert()) {
             Serial.printf("  [ALERT] DoseManager has pending missed dose alerts (Count: %u)\n",
@@ -509,12 +559,33 @@ void handleSerialCommands() {
         if (cellNum >= 1 && cellNum <= (int)getHardwareCellCount()) {
             uint8_t r = 0, c = 0;
             getHardwareCellGridCoords(cellNum - 1, r, c);
-            Serial.printf("[COMMAND] Triggering MEDICINE_DUE for Cell %d (Row %u, Col %u)\n", cellNum, r, c);
-            triggerHardwareMedicineDue(cellNum - 1);
+
+            EngineCell* cell = scheduleEngine.getCellMutable(cellNum - 1);
+            const CellInventory* inv = doseManager.getCell(cellNum);
+            uint16_t currentStock = (cell) ? cell->currentStock : (inv ? inv->stock : 0);
+
+            if (currentStock == 0) {
+                Serial.printf("[STOCK ALERT] Cannot trigger DUE for Cell %d (Row %u, Col %u): OUT OF STOCK (Stock: 0)!\n",
+                              cellNum, r, c);
+                Serial.printf("[STOCK ALERT] Servo kept CLOSED. Please use 'RESTOCK %d <qty>' first.\n", cellNum);
+                triggerHardwareMissedDose(cellNum - 1); // Yellow warning LED, servo stays CLOSED
+                oledUi.requestRedraw();
+                return;
+            }
+
+            Serial.printf("[COMMAND] Triggering MEDICINE_DUE for Cell %d (Row %u, Col %u) - Stock: %u\n",
+                          cellNum, r, c, currentStock);
+            bool ok = scheduleEngine.triggerDueEvent(cellNum - 1);
+            if (!ok) {
+                triggerHardwareMedicineDue(cellNum - 1);
+                doseManager.addDose((uint16_t)(1000 + cellNum), cellNum, rtc.now().unixtime(), 1);
+                doseManager.update(rtc.now().unixtime());
+            }
         } else {
             Serial.printf("Invalid cell: '%s' (Available: 1 to %u, or Row,Col up to %u,%u)\n",
                           arg.c_str(), getHardwareCellCount(), getHardwareGridRows(), getHardwareGridCols());
         }
+        return;
     } else if (upperLine.startsWith("MISSED ")) {
         String arg = line.substring(7);
         arg.trim();
@@ -535,13 +606,41 @@ void handleSerialCommands() {
         if (cellNum >= 1 && cellNum <= (int)getHardwareCellCount()) {
             uint8_t r = 0, c = 0;
             getHardwareCellGridCoords(cellNum - 1, r, c);
-            Serial.printf("[COMMAND] Simulating CONFIRM for Cell %d (Row %u, Col %u)\n", cellNum, r, c);
-            scheduleEngine.handleCellButtonPress(cellNum - 1);
-            triggerHardwareDoseConfirmed(cellNum - 1);
+
+            EngineCell* cell = scheduleEngine.getCellMutable(cellNum - 1);
+            const CellInventory* inv = doseManager.getCell(cellNum);
+            uint16_t currentStock = (cell) ? cell->currentStock : (inv ? inv->stock : 0);
+
+            if (currentStock == 0) {
+                Serial.printf("[STOCK ERROR] Cannot confirm Cell %d (Row %u, Col %u): Stock is 0 (OUT OF STOCK)!\n",
+                              cellNum, r, c);
+                Serial.printf("[STOCK ERROR] Dose cannot be taken from an empty compartment. Refill with 'RESTOCK %d <qty>'.\n",
+                              cellNum);
+                return;
+            }
+
+            Serial.printf("[COMMAND] Confirming dose for Cell %d (Row %u, Col %u)\n", cellNum, r, c);
+            bool handled = scheduleEngine.handleCellButtonPress(cellNum - 1);
+            if (!handled) {
+                // Check if doseManager has an active due occurrence
+                DoseResult res = doseManager.confirmCell((uint8_t)cellNum, rtc.now().unixtime());
+                if (res == DoseResult::Confirmed || res == DoseResult::ConfirmedLowStock || res == DoseResult::ConfirmedStockEmpty) {
+                    uint16_t rem = doseManager.getCell((uint8_t)cellNum)->stock;
+                    if (cell) {
+                        cell->currentStock = rem;
+                    }
+                    Serial.printf("[DOSE_MANAGER] Cell %d confirmed via DoseManager! Remaining stock: %u\n", cellNum, rem);
+                    triggerHardwareDoseConfirmed(cellNum - 1);
+                } else {
+                    Serial.printf("[COMMAND] Cell %d has no active due dose to confirm (Stock unchanged: %u units).\n",
+                                  cellNum, currentStock);
+                }
+            }
         } else {
             Serial.printf("Invalid cell: '%s' (Available: 1 to %u, or Row,Col up to %u,%u)\n",
                           arg.c_str(), getHardwareCellCount(), getHardwareGridRows(), getHardwareGridCols());
         }
+        return;
     } else if (upperLine.startsWith("RESET ")) {
         String arg = line.substring(6);
         arg.trim();
@@ -567,7 +666,22 @@ void handleSerialCommands() {
             EngineCell* cell = scheduleEngine.getCellMutable(cellNum - 1);
             if (cell) {
                 cell->currentStock = 1;  // Force stock below any threshold
+                doseManager.setCellStock((uint8_t)cellNum, 1);
                 Serial.printf("[COMMAND] Cell %d stock forced to 1 (LOW_STOCK_WARNING expected on next update)\n", cellNum);
+            }
+        } else {
+            Serial.printf("Invalid cell number: %d (Available: 1 to %u)\n", cellNum, scheduleEngine.getCellCount());
+        }
+    } else if (upperLine.startsWith("EMPTY ") || upperLine.startsWith("ZEROSTOCK ")) {
+        int spaceIdx = upperLine.indexOf(' ');
+        int cellNum = line.substring(spaceIdx + 1).toInt();
+        if (cellNum >= 1 && cellNum <= (int)scheduleEngine.getCellCount()) {
+            EngineCell* cell = scheduleEngine.getCellMutable(cellNum - 1);
+            if (cell) {
+                cell->currentStock = 0;
+                doseManager.setCellStock((uint8_t)cellNum, 0);
+                Serial.printf("[COMMAND] Cell %d stock forced to 0 (OUT OF STOCK)\n", cellNum);
+                triggerHardwareMissedDose(cellNum - 1); // Yellow warning LED, servo CLOSED
             }
         } else {
             Serial.printf("Invalid cell number: %d (Available: 1 to %u)\n", cellNum, scheduleEngine.getCellCount());
@@ -580,12 +694,16 @@ void handleSerialCommands() {
                 EngineCell* cell = scheduleEngine.getCellMutable(cellNum - 1);
                 if (cell) {
                     cell->currentStock += units;
+                    doseManager.setCellStock((uint8_t)cellNum, cell->currentStock);
                 }
             }
             if (ok) {
                 const CellInventory* inv = doseManager.getCell((uint8_t)cellNum);
-                Serial.printf("[COMMAND] Cell %d restocked +%d units. New stock: %u (Low: %s)\n",
-                              cellNum, units, inv ? inv->stock : 0, (inv && inv->isLow()) ? "YES" : "NO");
+                uint16_t s = inv ? inv->stock : 0;
+                Serial.printf("[COMMAND] Cell %d restocked +%d units. New stock: %u (Status: %s)\n",
+                              cellNum, units, s,
+                              (s == 0) ? "OUT OF STOCK" : ((inv && inv->isLow()) ? "LOW STOCK" : "OK"));
+                triggerHardwareReset(cellNum - 1);
             } else {
                 Serial.printf("[COMMAND] Failed to restock Cell %d (invalid cell or overflow)\n", cellNum);
             }
@@ -593,6 +711,6 @@ void handleSerialCommands() {
             Serial.println("Usage: RESTOCK <cellNum> <units> (e.g. RESTOCK 1 10)");
         }
     } else {
-        Serial.printf("Unknown command: '%s'. Try: STATUS, GRID, CELLS, DUE, CONFIRM, PRESS, MISSED, RESET, LOWSTOCK, RESTOCK, TIME, GRACE\n", line.c_str());
+        Serial.printf("Unknown command: '%s'. Try: STATUS, GRID, CELLS, DUE, CONFIRM, PRESS, MISSED, RESET, LOWSTOCK, EMPTY, RESTOCK, TIME, GRACE\n", line.c_str());
     }
 }

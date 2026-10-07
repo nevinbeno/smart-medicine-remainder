@@ -45,6 +45,7 @@ public:
     int16_t findCellIndexById(const char* cellId) const;
 
     bool updateCellStock(uint8_t cellIndex, uint16_t newStock);
+    bool triggerDueEvent(uint8_t cellIndex);
 
     // ----------------------------------------------------
     // Event Listeners / Callbacks
