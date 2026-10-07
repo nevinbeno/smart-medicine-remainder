@@ -46,20 +46,20 @@
     {
       "cellId": "CELL01",
       "state": "OCCUPIED",
-      "currentStock": 20,
+      "currentStock": 1,
       "medicine": {
         "medicineId": "MED001",
         "name": "Paracetamol",
-        "lowStockThreshold": 3,
+        "lowStockThreshold": 0,
         "schedules": [
           {
-            "hour": 20,
-            "minute": 37,
+            "hour": 14,
+            "minute": 45,
             "doseQuantity": 1
           },
           {
-            "hour": 20,
-            "minute": 0,
+            "hour": 14,
+            "minute": 46,
             "doseQuantity": 1
           }
         ]
