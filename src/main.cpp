@@ -577,8 +577,11 @@ void handleSerialCommands() {
                           cellNum, r, c, currentStock);
             bool ok = scheduleEngine.triggerDueEvent(cellNum - 1);
             if (!ok) {
-                triggerHardwareMedicineDue(cellNum - 1);
-                doseManager.addDose((uint16_t)(1000 + cellNum), cellNum, rtc.now().unixtime(), 1);
+                uint16_t reqQty = 1;
+                if (cell && cell->scheduleCount > 0) {
+                    reqQty = cell->schedules[0].doseQuantity;
+                }
+                doseManager.addDose((uint16_t)(1000 + cellNum), cellNum, rtc.now().unixtime(), reqQty);
                 doseManager.update(rtc.now().unixtime());
             }
         } else {

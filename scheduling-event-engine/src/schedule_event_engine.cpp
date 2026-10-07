@@ -174,7 +174,21 @@ bool ScheduleEventEngine::triggerDueEvent(uint8_t cellIndex)
     strncpy(event.medicineName, cells[cellIndex].medicineName, MAX_ENGINE_STRING_LEN - 1);
     event.medicineName[MAX_ENGINE_STRING_LEN - 1] = '\0';
 
-    event.doseQuantity = 1;
+    uint16_t qty = 1;
+    if (cells[cellIndex].scheduleCount > 0)
+    {
+        qty = cells[cellIndex].schedules[0].doseQuantity;
+        for (uint8_t s = 0; s < cells[cellIndex].scheduleCount; s++)
+        {
+            if (cells[cellIndex].schedules[s].hour == currentTime.hour &&
+                cells[cellIndex].schedules[s].minute == currentTime.minute)
+            {
+                qty = cells[cellIndex].schedules[s].doseQuantity;
+                break;
+            }
+        }
+    }
+    event.doseQuantity = (qty > 0) ? qty : 1;
     event.scheduledTime = currentTime;
     event.triggeredTime = currentTime;
     event.triggeredEpoch = (timeProvider) ? timeProvider->getEpochSeconds() : 0;
