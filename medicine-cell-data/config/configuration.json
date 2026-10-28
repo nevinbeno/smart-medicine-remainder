@@ -53,8 +53,8 @@
         "lowStockThreshold": 0,
         "schedules": [
           {
-            "hour": 14,
-            "minute": 45,
+            "hour": 13,
+            "minute": 38,
             "doseQuantity": 1
           },
           {
