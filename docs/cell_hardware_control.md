@@ -213,7 +213,7 @@ Edit `medicine-cell-data/config/configuration.json` — firmware + diagram gener
 * **Virtual canvas:** `scripts/set_diagram_grid.py` wires 1-4 to ESP GPIOs, gives 5+ power-only + orange `Btn X (V)` label + `virtual_note` text (`PRESS <id> to confirm`).
 
 ### B. Manual CLI Generator Tool
-Run the helper script [scripts/set_diagram_grid.py](file:///Users/gabriel/Projects/smart-medicine-remainder/scripts/set_diagram_grid.py):
+Run the helper script [`scripts/set_diagram_grid.py`](../scripts/set_diagram_grid.py):
 
 ```bash
 # Auto-sync directly from configuration.json:

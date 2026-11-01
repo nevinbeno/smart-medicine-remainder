@@ -422,3 +422,27 @@ void setup() {
 
 void loop() {
 }
+
+#ifndef ARDUINO
+int main(int argc, char** argv) {
+    (void)argc;
+    (void)argv;
+    UNITY_BEGIN();
+    RUN_TEST(test_initial_4cell_state);
+    RUN_TEST(test_individual_servos_open_only_for_due_cell);
+    RUN_TEST(test_confirm_closes_only_that_cells_servo);
+    RUN_TEST(test_common_buzzer_arbitration_across_all_4_cells);
+    RUN_TEST(test_missed_dose_warning_per_cell);
+    RUN_TEST(test_reset_functionality);
+    RUN_TEST(test_dynamic_cell_count_initialization);
+    RUN_TEST(test_dynamic_setCellCount_expansion);
+    RUN_TEST(test_dynamic_setCellCount_reduction_and_cleanup);
+    RUN_TEST(test_dynamic_cell_count_bounds_validation);
+    RUN_TEST(test_matrix_grid_2x2_4x4_8x8_scaling);
+    RUN_TEST(test_matrix_grid_coordinate_translation_and_triggers);
+    RUN_TEST(test_matrix_grid_8x8_buzzer_arbitration);
+    RUN_TEST(test_4x4_single_compartment_complete_isolation);
+    return UNITY_END();
+}
+#endif
+

@@ -144,7 +144,7 @@ You can type these commands in the Serial Monitor (115200 baud) at any time:
 
 ## 7. Wokwi Canvas Configuration via `grid_config.json`
 
-To customize the physical component layout on the Wokwi canvas (`diagram.json`), edit the configuration variable in [grid_config.json](file:///Users/gabriel/Projects/smart-medicine-remainder/grid_config.json):
+To customize the physical component layout on the Wokwi canvas (`diagram.json`), edit the configuration variable in [`grid_config.json`](../grid_config.json):
 
 ```json
 {

@@ -586,14 +586,14 @@ we issue the RESTOCK command, normal dispensing resumes."
 
 ## 8. Automated Testing & Verification Suite
 
-Our codebase includes **31 automated unit tests** achieving 100% pass rates across three independent test suites:
+Our codebase includes **33 automated unit tests** achieving 100% pass rates across three independent test suites:
 
 | Suite | Component | Scope | Test Count | Pass Rate |
 | :--- | :--- | :--- | :---: | :---: |
 | **Suite 1** | Role 5 Dose Manager | Stock decrements, zero-stock guard, refills, overflow protection | **7 / 7** | **100%** |
 | **Suite 2** | Role 2 Scheduling Engine | Minute matching, simultaneous alarms, grace periods, rollover | **12 / 12** | **100%** |
-| **Suite 3** | Role 4 Hardware & Matrix HAL | Physical pins, Virtual HAL (1x1 to 8x8), buzzer, debounce | **12 / 12** | **100%** |
-| **Total** | **Full System** | **End-to-End Automated Verification** | **31 / 31** | **100%** |
+| **Suite 3** | Role 4 Hardware & Matrix HAL | Physical pins, Virtual HAL (1x1 to 8x8), buzzer, debounce | **14 / 14** | **100%** |
+| **Total** | **Full System** | **End-to-End Automated Verification** | **33 / 33** | **100%** |
 
 ### One-Line Test Command
 To run all 31 tests and compile the firmware in sequence:

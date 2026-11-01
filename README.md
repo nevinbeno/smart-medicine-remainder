@@ -1,7 +1,7 @@
 # Smart Medicine Reminder & Dispensing Workstation
 
 [![PlatformIO Build](https://img.shields.io/badge/PlatformIO-ESP32%20DevKit%20V1-orange.svg)](https://platformio.org/)
-[![Tests](https://img.shields.io/badge/Unit%20Tests-31%2F31%20Passed%20(100%25)-brightgreen.svg)](test/run_all_tests.sh)
+[![Tests](https://img.shields.io/badge/Unit%20Tests-33%2F33%20Passed%20(100%25)-brightgreen.svg)](test/run_all_tests.sh)
 [![Architecture](https://img.shields.io/badge/Architecture-Modular%205--Role%20HAL-blue.svg)](docs/system_integration.md)
 [![License](https://img.shields.io/badge/License-MIT-lightgrey.svg)](LICENSE)
 
@@ -163,19 +163,19 @@ Connect to the Serial Monitor at **115200 baud** to run interactive commands:
 
 ---
 
-## Automated Verification Suite (31 / 31 Tests Passing)
+## Automated Verification Suite (33 / 33 Tests Passing)
 
-The project includes 31 automated tests with 100% pass rates across three independent suites:
+The project includes 33 automated tests with 100% pass rates across three independent suites:
 
 ```bash
-# Run all 31 unit tests in one command
+# Run all 33 unit tests in one command
 bash test/run_all_tests.sh
 ```
 
 ### Breakdown of Test Suites
-- **Role 5 Dose Manager (`test/test_dose_manager/test_main.cpp`)**: 7/7 tests pass (Native Unity framework). Verifies stock decrements, empty stock locking, refills, and overflow protection.
+- **Role 5 Dose Manager (`test/test_dose_manager/test_main.cpp`)**: 7/7 tests pass (PlatformIO Unity / Native C++). Verifies stock decrements, empty stock locking, refills, and overflow protection.
 - **Role 2 Scheduling Engine (`scheduling-event-engine/test/run_tests.sh`)**: 12/12 tests pass (Standalone C++ runner). Verifies minute matching, simultaneous alarms, grace periods, and midnight rollover.
-- **Role 4 Hardware & Matrix HAL (`test/run_hardware_tests.sh`)**: 12/12 test suites pass (Hardware C++ runner). Verifies physical GPIO pins, 1x1 through 8x8 virtual matrix grids, buzzer arbitration, and button debounce.
+- **Role 4 Hardware & Matrix HAL (`test/run_hardware_tests.sh`)**: 14/14 test suites pass (Hardware C++ runner). Verifies physical GPIO pins, 1x1 through 8x8 virtual matrix grids, buzzer arbitration, and button debounce.
 
 ---
 

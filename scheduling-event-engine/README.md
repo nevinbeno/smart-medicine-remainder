@@ -170,7 +170,7 @@ clang++ -std=c++14 -Wall -Wextra \
 ### 4.3. PlatformIO Firmware Build
 Build target firmware for ESP32:
 ```bash
-/Users/gabriel/.platformio/penv/bin/pio run
+pio run
 ```
 Output:
 ```txt
