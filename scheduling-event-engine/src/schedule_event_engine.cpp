@@ -198,6 +198,65 @@ bool ScheduleEventEngine::triggerDueEvent(uint8_t cellIndex)
     return true;
 }
 
+bool ScheduleEventEngine::triggerMissedEvent(uint8_t cellIndex)
+{
+    if (cellIndex >= cellCount)
+    {
+        return false;
+    }
+
+    if (cells[cellIndex].state != CellState::OCCUPIED || !cells[cellIndex].hasMedicine)
+    {
+        return false;
+    }
+
+    if (isCellMissed(cellIndex))
+    {
+        return true;
+    }
+
+    for (uint8_t i = 0; i < dueEventCount; i++)
+    {
+        if (activeDueEvents[i].cellIndex == cellIndex)
+        {
+            removeDueEventByIndex(i);
+            break;
+        }
+    }
+
+    if (missedEventCount >= MAX_MISSED_EVENTS)
+    {
+        return false;
+    }
+
+    TimeOfDay currentTime = (timeProvider) ? timeProvider->getCurrentTime() : TimeOfDay();
+
+    DoseEvent event;
+    event.eventId = ++nextEventId;
+    event.type = EventType::DOSE_MISSED;
+    event.state = EventState::MISSED;
+
+    strncpy(event.cellId, cells[cellIndex].cellId, MAX_ENGINE_ID_LEN - 1);
+    event.cellId[MAX_ENGINE_ID_LEN - 1] = '\0';
+    event.cellIndex = cellIndex;
+
+    strncpy(event.medicineId, cells[cellIndex].medicineId, MAX_ENGINE_ID_LEN - 1);
+    event.medicineId[MAX_ENGINE_ID_LEN - 1] = '\0';
+
+    strncpy(event.medicineName, cells[cellIndex].medicineName, MAX_ENGINE_STRING_LEN - 1);
+    event.medicineName[MAX_ENGINE_STRING_LEN - 1] = '\0';
+
+    event.doseQuantity = (cells[cellIndex].scheduleCount > 0) ? cells[cellIndex].schedules[0].doseQuantity : 1;
+    event.scheduledTime = currentTime;
+    event.triggeredTime = currentTime;
+    event.triggeredEpoch = (timeProvider) ? timeProvider->getEpochSeconds() : 0;
+
+    activeMissedEvents[missedEventCount++] = event;
+    notifyListeners(event);
+    return true;
+}
+
+
 bool ScheduleEventEngine::registerEventCallback(EventCallbackFn callback, void* userData)
 {
     if (!callback || callbackCount >= MAX_EVENT_LISTENERS)

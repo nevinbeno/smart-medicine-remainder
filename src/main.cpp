@@ -569,7 +569,6 @@ void handleSerialCommands() {
                               cellNum, r, c);
                 Serial.printf("[STOCK ALERT] Servo kept CLOSED. Please use 'RESTOCK %d <qty>' first.\n", cellNum);
                 triggerHardwareMissedDose(cellNum - 1); // Yellow warning LED, servo stays CLOSED
-                oledUi.requestRedraw();
                 return;
             }
 
@@ -596,8 +595,10 @@ void handleSerialCommands() {
         if (cellNum >= 1 && cellNum <= (int)getHardwareCellCount()) {
             uint8_t r = 0, c = 0;
             getHardwareCellGridCoords(cellNum - 1, r, c);
-            Serial.printf("[COMMAND] Triggering MISSED_DOSE for Cell %d (Row %u, Col %u)\n", cellNum, r, c);
+            Serial.printf("[COMMAND] Triggering MISSED_DOSE for Cell %d (Row %u, Col %u)\r\n", cellNum, r, c);
             triggerHardwareMissedDose(cellNum - 1);
+            scheduleEngine.triggerMissedEvent(cellNum - 1);
+            oledUi.requestRedraw();
         } else {
             Serial.printf("Invalid cell: '%s' (Available: 1 to %u, or Row,Col up to %u,%u)\n",
                           arg.c_str(), getHardwareCellCount(), getHardwareGridRows(), getHardwareGridCols());

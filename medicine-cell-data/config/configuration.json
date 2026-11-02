@@ -6,9 +6,12 @@
     "how_to_change_grid_or_cell_count": "Change 'cellCount' to match the number of active compartments you want loaded at boot (e.g., 1 for 1x1, 2 for 1x2, 4 for 2x2, 9 for 3x3, 16 for 4x4).",
     "how_to_add_a_medicine": "Copy the '_template_new_occupied_cell' below and paste it into the 'cells' array, then update 'cellCount'.",
     "how_to_add_more_schedules": "Add another '{ hour: HH, minute: MM, doseQuantity: Q }' object to the 'schedules' array of that medicine (up to 8 schedules per medicine).",
-    "valid_cell_states": ["OCCUPIED", "EMPTY", "DISABLED_STATE"]
+    "valid_cell_states": [
+      "OCCUPIED",
+      "EMPTY",
+      "DISABLED_STATE"
+    ]
   },
-
   "_template_new_occupied_cell": {
     "cellId": "CELL05",
     "state": "OCCUPIED",
@@ -31,22 +34,19 @@
       ]
     }
   },
-
   "_template_empty_standby_cell": {
     "cellId": "CELL06",
     "state": "EMPTY",
     "currentStock": 0,
     "medicine": null
   },
-
   "grid": "2x2",
   "cellCount": 4,
-
   "cells": [
     {
       "cellId": "CELL01",
       "state": "OCCUPIED",
-      "currentStock": 1,
+      "currentStock": 10,
       "medicine": {
         "medicineId": "MED001",
         "name": "Paracetamol",

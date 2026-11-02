@@ -15,8 +15,8 @@ static void internalConfirmCallback(uint8_t cellId) {
     if (g_suppressCallback) {
         return;
     }
-    Serial.printf("\n>>> [HARDWARE EVENT] Physical DOSE_CONFIRMED button pressed on Cell %u!\n", cellId + 1);
-    Serial.printf("    Hardware Action: Cell %u RGB is GREEN for 1s. Servo %u is CLOSED.\n\n", cellId + 1, cellId + 1);
+    Serial.printf("\r\n>>> [HARDWARE EVENT] Physical DOSE_CONFIRMED button pressed on Cell %u!\r\n", cellId + 1);
+    Serial.printf("    Hardware Action: Cell %u RGB is GREEN for 1s. Servo %u is CLOSED.\n\r\n", cellId + 1, cellId + 1);
     if (g_bridgeConfirmCallback) {
         g_bridgeConfirmCallback(cellId);
     }
@@ -27,7 +27,7 @@ static void internalConfirmCallback(uint8_t cellId) {
  *        Invoked whenever any cell undergoes a state machine transition.
  */
 static void internalStateChangedCallback(uint8_t cellId, CellState oldState, CellState newState) {
-    Serial.printf("[STATE CHANGE] Cell %u: %s -> %s\n",
+    Serial.printf("[STATE CHANGE] Cell %u: %s -> %s\r\n",
                   cellId + 1, cellStateToString(oldState), cellStateToString(newState));
 }
 
@@ -148,15 +148,15 @@ void printHardwareStatus() {
     uint8_t cols = cellHardware.getGridCols();
     uint8_t total = cellHardware.getCellCount();
 
-    Serial.println("\n=======================================================");
-    Serial.printf(" HARDWARE STATUS: Matrix Grid [%ux%u] = %u Active Cells\n", rows, cols, total);
-    Serial.printf(" Physical Direct GPIOs : Cells 1..%u\n",
+    Serial.println("\r\n=======================================================");
+    Serial.printf(" HARDWARE STATUS: Matrix Grid [%ux%u] = %u Active Cells\r\n", rows, cols, total);
+    Serial.printf(" Physical Direct GPIOs : Cells 1..%u\r\n",
                   HW_DIRECT_PIN_CELLS < total ? HW_DIRECT_PIN_CELLS : total);
     if (total > HW_DIRECT_PIN_CELLS) {
-        Serial.printf(" Virtual/Expander GPIOs: Cells %u..%u\n", HW_DIRECT_PIN_CELLS + 1, total);
+        Serial.printf(" Virtual/Expander GPIOs: Cells %u..%u\r\n", HW_DIRECT_PIN_CELLS + 1, total);
     }
-    Serial.printf(" Active Alerts         : %u\n", cellHardware.getActiveAlertCount());
-    Serial.printf(" Common Buzzer         : %s (Channel %u)\n",
+    Serial.printf(" Active Alerts         : %u\r\n", cellHardware.getActiveAlertCount());
+    Serial.printf(" Common Buzzer         : %s (Channel %u)\r\n",
                   cellHardware.getActiveAlertCount() > 0 ? "PULSING" : "SILENT",
                   BUZZER_LEDC_CHANNEL);
     Serial.println("-------------------------------------------------------");
@@ -179,5 +179,5 @@ void printHardwareStatus() {
         Serial.println();
     }
     Serial.println(" P=Physical GPIO (Btn/LED/Servo wired)  V=Virtual expander (PRESS <id> to confirm)");
-    Serial.println("=======================================================\n");
+    Serial.println("=======================================================\r\n");
 }
