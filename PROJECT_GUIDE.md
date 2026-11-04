@@ -136,7 +136,7 @@ cat medicine-cell-data/database/schema.sql
 ---
 
 ### Role 2: Scheduling & Time/Event Engine
-- **Owner / Contributor:** Gabriel (`gabriel22dec`)
+- **Owner / Contributor:** Gabriel (`gabsgj`)
 - **Primary Directories:** `scheduling-event-engine/`
 - **Key Files:**
   - `scheduling-event-engine/include/schedule_event_engine.hpp` — Core scheduling engine interface.
@@ -185,7 +185,7 @@ bash scheduling-event-engine/test/run_tests.sh
 ---
 
 ### Role 4: Cell Hardware & Alert Control
-- **Owner / Contributor:** Pavithra (`Pavithra-S-hub`)
+- **Owner / Contributor:** Pavithra (`PavithraSrajesh`)
 - **Primary Directories:** `lib/CellHardwareControl/`, `scripts/`
 - **Key Files:**
   - `lib/CellHardwareControl/src/CellHardwareController.cpp` & `.h` — Master hardware arbitrator.
@@ -219,7 +219,7 @@ python3 scripts/set_diagram_grid.py 4x4
 ---
 
 ### Role 5: Dose Stock & Confirmation Management
-- **Owner / Contributor:** Abhiram H (`abhiramh3482`)
+- **Owner / Contributor:** Abhiram H (`AbhiramH7`)
 - **Primary Directories:** `include/dose_manager.h`, `test/test_dose_manager/`
 - **Key Files:**
   - `include/dose_manager.h` — Standalone header-only dose and inventory state manager.
