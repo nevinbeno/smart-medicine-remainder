@@ -269,10 +269,10 @@ bash test/run_all_tests.sh
 
 ---
 
-## Detailed Presentation & Defense Guide
+## Project Report & Presentation Guide
 
-For the full slide-by-slide spoken script, live demo walkthrough, and technical Q&A defense answers, consult:
-📄 **[PROJECT_GUIDE.md](PROJECT_GUIDE.md)**
+- 📄 **Official MCU Project Report (PDF)**: **[MCU_Project_Report.pdf](MCU_Project_Report.pdf)** *(and editable Word document: [MCU_Project_Report.docx](MCU_Project_Report.docx))*
+- 📋 **Presentation & Defense Guide**: **[PROJECT_GUIDE.md](PROJECT_GUIDE.md)** *(complete slide-by-slide spoken script, live demo walkthrough, and technical Q&A defense answers)*
 
 ---
 
@@ -284,6 +284,8 @@ For the full slide-by-slide spoken script, live demo walkthrough, and technical 
 ├── grid_config.json                   # Active matrix grid layout metadata
 ├── platformio.ini                     # Build environments (ESP32 DevKit V1 & Native Unity)
 ├── extra_script.py                    # PlatformIO SCons pre-build hook for SPoE auto-sync
+├── MCU_Project_Report.pdf             # Official department project report (PDF)
+├── MCU_Project_Report.docx            # Editable project report document (Word)
 ├── README.md                          # Official project documentation & visual gallery
 ├── PROJECT_GUIDE.md                   # Complete presentation script & technical defense guide
 ├── LICENSE                            # MIT License
@@ -309,9 +311,8 @@ For the full slide-by-slide spoken script, live demo walkthrough, and technical 
 │   ├── main.cpp                       # Master FreeRTOS loop, bootloader, Serial CLI
 │   ├── HardwareBridge.cpp             # Event latching & non-reentrant bridge
 │   └── HardwareBridge.h               # Hardware bridge definitions
-├── docs/                              # Technical reports, architectural specs, and figures
+├── docs/                              # Technical architectural specifications and figures
 │   ├── figures/                       # High-resolution simulation screenshots & diagrams
-│   ├── MCU_Project_Report.docx        # Official department project report
 │   ├── system_integration.md          # End-to-end integration architecture specification
 │   ├── cell_hardware_control.md       # Hardware controller and actuator documentation
 │   └── dose-stock-confirmation.md     # Stock ledger and confirmation design
